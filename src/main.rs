@@ -11,8 +11,6 @@ fn calculator1() {
     assert!(rascal_grammar::TermParser::new().parse("(22 + 12) * 2").is_err());
 }
 
-
-
 fn main() {
     println!("Hello from the Rascal compiler");
 }

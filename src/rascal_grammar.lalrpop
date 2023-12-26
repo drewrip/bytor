@@ -1,17 +1,22 @@
 use std::str::FromStr;
-use crate::ast::BinOp;
+use crate::ast::Expr;
+use lalrpop_util::ParseError;
 
 grammar;
 
-pub Expr: i32 = {
+pub Program: Box<Expr> = {
+    "program" <b:Expr> "end" => b,
+}
+
+pub Expr: Box<Expr> = {
     #[precedence(level="0")] // Highest precedence
-    Term,
+    <t:Term> => Box::new(Expr::Term(t)),
     #[precedence(level="1")] #[assoc(side="left")]
-    <l:Expr> "*" <r:Expr> => l * r,
-    <l:Expr> "/" <r:Expr> => l / r,
+    <l:Expr> "*" <r:Expr> => Box::new(Expr::Mult(l, r)),
+    <l:Expr> "/" <r:Expr> => Box::new(Expr::Div(l, r)),
     #[precedence(level="2")] #[assoc(side="left")]
-    <l:Expr> "+" <r:Expr> => l + r,
-    <l:Expr> "-" <r:Expr> => l - r,
+    <l:Expr> "+" <r:Expr> => Box::new(Expr::Add(l, r)),
+    <l:Expr> "-" <r:Expr> => Box::new(Expr::Sub(l, r)),
 };
 
 pub Term: i32 = {
