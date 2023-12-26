@@ -1,0 +1,7 @@
+let x = 4;
+
+program test_if(output){
+    if x == 4 {
+        print("Inside branch with x={}", x);
+    } 
+}

@@ -1,0 +1,12 @@
+let x = 4;
+let y = 5;
+let result = 0;
+
+function add(a: int64, b: int64) -> int64 {
+    a + b
+}
+
+program test_add(out) with (x, y, mut res) {
+    res = add(x, y);
+    print("Result {}", res);
+}
