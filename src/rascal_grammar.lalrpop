@@ -1,12 +1,29 @@
 use std::str::FromStr;
-use crate::ast::Expr;
-use lalrpop_util::ParseError;
+use crate::ast::{Expr, Term, AssignOp, Stmt, Var, Type};
 
 grammar;
 
-pub Program: Box<Expr> = {
-    "program" <b:Expr> "end" => b,
-}
+pub Stmts = Semicolon<Stmt>;
+
+Semicolon<T>: Vec<T> = {
+    <mut v:(<T> ";")*> <e:T?> => match e {
+        None => v,
+        Some(e) => {
+            v.push(e);
+            v
+        }
+    }
+};
+
+pub Stmt: Box<Stmt> = {
+    "let" <i:Id> <ao:AssignOp> <e:Expr>  => Box::new(
+        Stmt::Assign(Box::new(Var{type_t: Type::Int64, ident: i}), ao, e)
+    ),
+};
+
+pub Program: Vec<Box<Stmt>> = {
+    "program" <b:Stmts> "end" => b,
+};
 
 pub Expr: Box<Expr> = {
     #[precedence(level="0")] // Highest precedence
@@ -19,9 +36,19 @@ pub Expr: Box<Expr> = {
     <l:Expr> "-" <r:Expr> => Box::new(Expr::Sub(l, r)),
 };
 
-pub Term: i32 = {
-    <n:Num> => n,
-    "(" <t:Term> ")" => t,
+pub Term: Box<Term> = {
+    <n:Num> => Box::new(Term::Num(n)),
+    "(" <t:Expr> ")" => Box::new(Term::Expr(t)),
 };
 
 Num: i32 = r"[0-9]+" => i32::from_str(<>).unwrap();
+
+Id: String = r"([a-zA-Z_])([\w\d_])*" => String::from(<>);
+
+pub AssignOp: AssignOp = {
+    "=" => AssignOp::Assign,
+    "+=" => AssignOp::AddAssign,
+    "-=" => AssignOp::SubAssign,
+    "*=" => AssignOp::MultAssign,
+    "/=" => AssignOp::DivAssign,
+};

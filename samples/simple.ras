@@ -1,0 +1,3 @@
+program
+    let foo = (1 * 2) - 2;
+end
