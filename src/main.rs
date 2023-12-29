@@ -23,7 +23,7 @@ fn main() {
     let args = Args::parse();
     
     let src_file = fs::read_to_string(args.infile).expect("ERROR: couldn't find source file");
-    let root = rascal_grammar::ProgramParser::new().parse(&src_file);
+    let root = rascal_grammar::RootParser::new().parse(&src_file);
     println!("{:?}", root);
 }
 

@@ -1,9 +1,16 @@
 use std::str::FromStr;
-use crate::ast::{Expr, Term, AssignOp, Stmt, Var, Type};
+use crate::ast::*;
 
 grammar;
 
+pub Root: Box<Root> = {
+    <preB:Stmts> <prog:Program> <postB:Stmts> => Box::new(
+        Root{preblock: preB, program: prog, postblock: postB}
+    ),
+};
+
 pub Stmts = Semicolon<Stmt>;
+pub Exprs = Comma<Expr>;
 
 Semicolon<T>: Vec<T> = {
     <mut v:(<T> ";")*> <e:T?> => match e {
@@ -15,19 +22,67 @@ Semicolon<T>: Vec<T> = {
     }
 };
 
-pub Stmt: Box<Stmt> = {
-    "let" <i:Id> <ao:AssignOp> <e:Expr>  => Box::new(
-        Stmt::Assign(Box::new(Var{type_t: Type::Int64, ident: i}), ao, e)
-    ),
+Comma<T>: Vec<T> = {
+    <mut v:(<T> ",")*> <e:T?> => match e {
+        None => v,
+        Some(e) => {
+            v.push(e);
+            v
+        }
+    }
 };
 
-pub Program: Vec<Box<Stmt>> = {
-    "program" <b:Stmts> "end" => b,
+pub Stmt: Box<Stmt> = {
+    "let" <i:Id> "=" <e:Expr> => Box::new(
+        Stmt::Assign(Box::new(Var{type_t: Type::Int64, ident: i}), e)
+    ),
+    <i:Id> <ao:AssignOp> <e:Expr> => Box::new(
+        Stmt::Reassign(Box::new(Var{type_t: Type::Int64, ident: i}), ao, e)
+    ),
+    <id:Id> "(" <e:Exprs> ")" => Box::new(Stmt::Call(id, e)),
+    <f:Func> => Box::new(Stmt::FuncDef(f)),
+};
+
+pub Program: Box<Program> = {
+    "program" <id:Id> <b:Stmts> "end" => Box::new(Program::NoWith(id, b)),
+    "program" <id:Id> <w:With> <b:Stmts> "end" => Box::new(Program::With(id, w, b)),
+};
+
+pub With: With = {
+    "with" "(" <w:WithVars> ")" => w,
+};
+
+pub WithVars = Comma<WithVar>;
+
+pub WithVar: Box<WithVar> = {
+    "mut" <id:Id> => Box::new(WithVar::Mut(id)),
+    <id:Id> => Box::new(WithVar::NonMut(id)),
+};
+
+pub Params: Params = Comma<Param>;
+
+pub Param: Box<Var> = {
+    <id:Id> ":" <t:Type> => Box::new(Var{type_t: t, ident: id}),
+};
+
+pub Func: Box<Func> = {
+    "function" <id:Id> "(" <p:Params> ")" <t:("->" <Type>)?> <w:With?> <b:Stmts> "end" => {
+        let ret = match t {
+            None => Type::Nil,
+            Some(t) => Type::Int64,
+        };
+        let with = match w {
+            None => vec![],
+            Some(w) => w,
+        };
+        Box::new(Func{ret_t: ret, params: p, with: with, ident: id, block: b})
+    },
 };
 
 pub Expr: Box<Expr> = {
     #[precedence(level="0")] // Highest precedence
     <t:Term> => Box::new(Expr::Term(t)),
+    <id:Id> "(" <e:Exprs> ")" => Box::new(Expr::Call(id, e)),
     #[precedence(level="1")] #[assoc(side="left")]
     <l:Expr> "*" <r:Expr> => Box::new(Expr::Mult(l, r)),
     <l:Expr> "/" <r:Expr> => Box::new(Expr::Div(l, r)),
@@ -52,3 +107,13 @@ pub AssignOp: AssignOp = {
     "*=" => AssignOp::MultAssign,
     "/=" => AssignOp::DivAssign,
 };
+
+pub Type: Type = {
+    "int64" => Type::Int64,
+    "int32" => Type::Int32,
+    "uint64" => Type::UInt64,
+    "uint32" => Type::UInt32,
+    "float64" => Type::Float64,
+    "float32" => Type::Float32,
+    "Nil" => Type::Nil,
+}

@@ -1,3 +1,26 @@
+pub type Block = Vec<Box<Stmt>>;
+
+#[derive(Debug)]
+pub struct Root {
+    pub preblock: Block,
+    pub program: Box<Program>,
+    pub postblock: Block,
+}
+
+#[derive(Debug)]
+pub enum Program {
+    NoWith(String, Block),
+    With(String, With, Block),
+}
+
+pub type With = Vec<Box<WithVar>>;
+
+#[derive(Debug)]
+pub enum WithVar {
+    NonMut(String),
+    Mut(String),
+}
+
 #[derive(Debug)]
 pub enum Expr {
     Term(Box<Term>),
@@ -5,6 +28,7 @@ pub enum Expr {
     Sub(Box<Expr>, Box<Expr>),
     Mult(Box<Expr>, Box<Expr>),
     Div(Box<Expr>, Box<Expr>),
+    Call(String, Vec<Box<Expr>>),
 }
 
 #[derive(Debug)]
@@ -24,7 +48,21 @@ pub enum AssignOp {
 
 #[derive(Debug)]
 pub enum Stmt {
-    Assign(Box<Var>, AssignOp, Box<Expr>),
+    Assign(Box<Var>, Box<Expr>),
+    Reassign(Box<Var>, AssignOp, Box<Expr>),
+    Call(String, Vec<Box<Expr>>),
+    FuncDef(Box<Func>),
+}
+
+pub type Params = Vec<Box<Var>>;
+
+#[derive(Debug)]
+pub struct Func {
+    pub ret_t: Type,
+    pub params: Params,
+    pub with: With,
+    pub ident: String,
+    pub block: Block,
 }
 
 #[derive(Debug)]
@@ -42,4 +80,5 @@ pub enum Type {
     Float64,
     Float32,
     Unknown,
+    Nil,
 }
