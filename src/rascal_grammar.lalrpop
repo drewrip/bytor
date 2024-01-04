@@ -1,11 +1,12 @@
 use std::str::FromStr;
+use std::sync::Arc;
 use crate::ast::*;
 
 grammar;
 
-pub Root: Box<Root> = {
-    <preB:Stmts> <prog:Program> <postB:Stmts> => Box::new(
-        Root{preblock: preB, program: prog, postblock: postB}
+pub Root: Arc<Root> = {
+    <pre_b:Stmts> <prog:Program> <post_b:Stmts> => Arc::new(
+        Root{preblock: pre_b, program: prog, postblock: post_b}
     ),
 };
 
@@ -32,20 +33,20 @@ Comma<T>: Vec<T> = {
     }
 };
 
-pub Stmt: Box<Stmt> = {
-    "let" <i:Id> "=" <e:Expr> => Box::new(
-        Stmt::Assign(Box::new(Var{type_t: Type::Int64, ident: i}), e)
+pub Stmt: Arc<Stmt> = {
+    "let" <i:Id> "=" <e:Expr> => Arc::new(
+        Stmt::Assign(Arc::new(Var{type_t: Type::Int64, ident: i}), e)
     ),
-    <i:Id> <ao:AssignOp> <e:Expr> => Box::new(
-        Stmt::Reassign(Box::new(Var{type_t: Type::Int64, ident: i}), ao, e)
+    <i:Id> <ao:AssignOp> <e:Expr> => Arc::new(
+        Stmt::Reassign(Arc::new(Var{type_t: Type::Int64, ident: i}), ao, e)
     ),
-    <id:Id> "(" <e:Exprs> ")" => Box::new(Stmt::Call(id, e)),
-    <f:Func> => Box::new(Stmt::FuncDef(f)),
+    <id:Id> "(" <e:Exprs> ")" => Arc::new(Stmt::Call(id, e)),
+    <f:Func> => Arc::new(Stmt::FuncDef(f)),
 };
 
-pub Program: Box<Program> = {
-    "program" <id:Id> <b:Stmts> "end" => Box::new(Program::NoWith(id, b)),
-    "program" <id:Id> <w:With> <b:Stmts> "end" => Box::new(Program::With(id, w, b)),
+pub Program: Arc<Program> = {
+    "program" <id:Id> <b:Stmts> "end" => Arc::new(Program::NoWith(id, b)),
+    "program" <id:Id> <w:With> <b:Stmts> "end" => Arc::new(Program::With(id, w, b)),
 };
 
 pub With: With = {
@@ -54,18 +55,18 @@ pub With: With = {
 
 pub WithVars = Comma<WithVar>;
 
-pub WithVar: Box<WithVar> = {
-    "mut" <id:Id> => Box::new(WithVar::Mut(id)),
-    <id:Id> => Box::new(WithVar::NonMut(id)),
+pub WithVar: Arc<WithVar> = {
+    "mut" <id:Id> => Arc::new(WithVar::Mut(id)),
+    <id:Id> => Arc::new(WithVar::NonMut(id)),
 };
 
 pub Params: Params = Comma<Param>;
 
-pub Param: Box<Var> = {
-    <id:Id> ":" <t:Type> => Box::new(Var{type_t: t, ident: id}),
+pub Param: Arc<Var> = {
+    <id:Id> ":" <t:Type> => Arc::new(Var{type_t: t, ident: id}),
 };
 
-pub Func: Box<Func> = {
+pub Func: Arc<Func> = {
     "function" <id:Id> "(" <p:Params> ")" <t:("->" <Type>)?> <w:With?> <b:Stmts> "end" => {
         let ret = match t {
             None => Type::Nil,
@@ -75,25 +76,25 @@ pub Func: Box<Func> = {
             None => vec![],
             Some(w) => w,
         };
-        Box::new(Func{ret_t: ret, params: p, with: with, ident: id, block: b})
+        Arc::new(Func{ret_t: ret, params: p, with: with, ident: id, block: b})
     },
 };
 
-pub Expr: Box<Expr> = {
+pub Expr: Arc<Expr> = {
     #[precedence(level="0")] // Highest precedence
-    <t:Term> => Box::new(Expr::Term(t)),
-    <id:Id> "(" <e:Exprs> ")" => Box::new(Expr::Call(id, e)),
+    <t:Term> => Arc::new(Expr::Term(t)),
+    <id:Id> "(" <e:Exprs> ")" => Arc::new(Expr::Call(id, e)),
     #[precedence(level="1")] #[assoc(side="left")]
-    <l:Expr> "*" <r:Expr> => Box::new(Expr::Mult(l, r)),
-    <l:Expr> "/" <r:Expr> => Box::new(Expr::Div(l, r)),
+    <l:Expr> "*" <r:Expr> => Arc::new(Expr::Mult(l, r)),
+    <l:Expr> "/" <r:Expr> => Arc::new(Expr::Div(l, r)),
     #[precedence(level="2")] #[assoc(side="left")]
-    <l:Expr> "+" <r:Expr> => Box::new(Expr::Add(l, r)),
-    <l:Expr> "-" <r:Expr> => Box::new(Expr::Sub(l, r)),
+    <l:Expr> "+" <r:Expr> => Arc::new(Expr::Add(l, r)),
+    <l:Expr> "-" <r:Expr> => Arc::new(Expr::Sub(l, r)),
 };
 
-pub Term: Box<Term> = {
-    <n:Num> => Box::new(Term::Num(n)),
-    "(" <t:Expr> ")" => Box::new(Term::Expr(t)),
+pub Term: Arc<Term> = {
+    <n:Num> => Arc::new(Term::Num(n)),
+    "(" <t:Expr> ")" => Arc::new(Term::Expr(t)),
 };
 
 Num: i32 = r"[0-9]+" => i32::from_str(<>).unwrap();

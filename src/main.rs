@@ -4,6 +4,7 @@ use lalrpop_util::lalrpop_mod;
 use clap::Parser;
 
 pub mod ast;
+pub mod semantic;
 
 /// Compiler for the Rascal language
 #[derive(Parser, Debug)]
@@ -17,14 +18,16 @@ struct Args {
     outfile: String,
 }
 
+
 lalrpop_mod!(pub rascal_grammar);
 
 fn main() {
     let args = Args::parse();
-    
     let src_file = fs::read_to_string(args.infile).expect("ERROR: couldn't find source file");
-    let root = rascal_grammar::RootParser::new().parse(&src_file);
-    println!("{:?}", root);
+    let root = rascal_grammar::RootParser::new().parse(&src_file).unwrap();
+    let state = semantic::new_state(root);
+    state.check().unwrap();
+    println!("{:?}", state);
 }
 
 #[test]

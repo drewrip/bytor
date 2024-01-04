@@ -1,9 +1,11 @@
-pub type Block = Vec<Box<Stmt>>;
+use std::sync::Arc;
+
+pub type Block = Vec<Arc<Stmt>>;
 
 #[derive(Debug)]
 pub struct Root {
     pub preblock: Block,
-    pub program: Box<Program>,
+    pub program: Arc<Program>,
     pub postblock: Block,
 }
 
@@ -13,7 +15,7 @@ pub enum Program {
     With(String, With, Block),
 }
 
-pub type With = Vec<Box<WithVar>>;
+pub type With = Vec<Arc<WithVar>>;
 
 #[derive(Debug)]
 pub enum WithVar {
@@ -23,21 +25,21 @@ pub enum WithVar {
 
 #[derive(Debug)]
 pub enum Expr {
-    Term(Box<Term>),
-    Add(Box<Expr>, Box<Expr>),
-    Sub(Box<Expr>, Box<Expr>),
-    Mult(Box<Expr>, Box<Expr>),
-    Div(Box<Expr>, Box<Expr>),
-    Call(String, Vec<Box<Expr>>),
+    Term(Arc<Term>),
+    Add(Arc<Expr>, Arc<Expr>),
+    Sub(Arc<Expr>, Arc<Expr>),
+    Mult(Arc<Expr>, Arc<Expr>),
+    Div(Arc<Expr>, Arc<Expr>),
+    Call(String, Vec<Arc<Expr>>),
 }
 
 #[derive(Debug)]
 pub enum Term {
     Num(i32),
-    Expr(Box<Expr>),
+    Expr(Arc<Expr>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum AssignOp {
     Assign,
     AddAssign,
@@ -46,15 +48,15 @@ pub enum AssignOp {
     DivAssign,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Stmt {
-    Assign(Box<Var>, Box<Expr>),
-    Reassign(Box<Var>, AssignOp, Box<Expr>),
-    Call(String, Vec<Box<Expr>>),
-    FuncDef(Box<Func>),
+    Assign(Arc<Var>, Arc<Expr>),
+    Reassign(Arc<Var>, AssignOp, Arc<Expr>),
+    Call(String, Vec<Arc<Expr>>),
+    FuncDef(Arc<Func>),
 }
 
-pub type Params = Vec<Box<Var>>;
+pub type Params = Vec<Arc<Var>>;
 
 #[derive(Debug)]
 pub struct Func {
