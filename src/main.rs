@@ -1,10 +1,12 @@
 use std::fs;
 
-use lalrpop_util::lalrpop_mod;
 use clap::Parser;
+use lalrpop_util::lalrpop_mod;
 
 pub mod ast;
+pub mod codegen;
 pub mod semantic;
+pub mod types;
 
 /// Compiler for the Rascal language
 #[derive(Parser, Debug)]
@@ -18,16 +20,18 @@ struct Args {
     outfile: String,
 }
 
-
 lalrpop_mod!(pub rascal_grammar);
 
 fn main() {
     let args = Args::parse();
     let src_file = fs::read_to_string(args.infile).expect("ERROR: couldn't find source file");
     let root = rascal_grammar::RootParser::new().parse(&src_file).unwrap();
-    let state = semantic::new_state(root);
-    state.check().unwrap();
+    let mut state = semantic::new_state(root);
+    // Perform semantic checks and type checking
+    state.build();
     println!("{:?}", state);
+    // Generate code
+    codegen::build();
 }
 
 #[test]

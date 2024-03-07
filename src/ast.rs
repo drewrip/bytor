@@ -1,6 +1,24 @@
 use std::sync::Arc;
 
+use crate::types;
+
 pub type Block = Vec<Arc<Stmt>>;
+
+#[derive(Debug)]
+pub enum Node {
+    RootNode(Root),
+    ProgramNode(Program),
+    WithNode(With),
+    WithVarNode(WithVar),
+    BlockNode(Block),
+    ExprNode(Expr),
+    AssignOpNode(AssignOp),
+    StmtNode(Stmt),
+    ParamsNode(Params),
+    FuncNode(Func),
+    VarNode(Var),
+    TypeNode(types::Type),
+}
 
 #[derive(Debug)]
 pub struct Root {
@@ -60,7 +78,7 @@ pub type Params = Vec<Arc<Var>>;
 
 #[derive(Debug)]
 pub struct Func {
-    pub ret_t: Type,
+    pub ret_t: types::Type,
     pub params: Params,
     pub with: With,
     pub ident: String,
@@ -69,18 +87,6 @@ pub struct Func {
 
 #[derive(Debug)]
 pub struct Var {
-    pub type_t: Type,
+    pub type_t: types::Type,
     pub ident: String,
-}
-
-#[derive(Debug)]
-pub enum Type {
-    Int64,
-    Int32,
-    UInt64,
-    UInt32,
-    Float64,
-    Float32,
-    Unknown,
-    Nil,
 }

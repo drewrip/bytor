@@ -1,13 +1,14 @@
-use std::fmt;
 use std::collections::HashMap;
+use std::fmt;
 use std::sync::Arc;
 
 use crate::ast;
+use crate::types;
 
 type Result<T> = std::result::Result<T, SemanticError>;
 
 #[derive(Debug, Clone)]
-pub enum SemanticError{
+pub enum SemanticError {
     SomeError,
 }
 
@@ -18,20 +19,19 @@ impl fmt::Display for SemanticError {
 }
 
 #[derive(Debug)]
-pub enum Type {
-    Unknown,
-}
-
-#[derive(Debug)]
 pub struct Var {
-    type_t: Type,
+    type_t: types::Type,
     name: String,
 }
 
 #[derive(Debug)]
 pub struct Symbol {
-    type_t: Type,
+    type_t: types::Type,
     name: String,
+}
+
+pub fn new_symbol(type_t: types::Type, name: String) -> Symbol {
+    Symbol { type_t, name }
 }
 
 #[derive(Debug)]
@@ -39,75 +39,58 @@ pub struct SymbolTable {
     table: HashMap<Symbol, Var>,
 }
 
+pub fn new_empty_symbol_table() -> SymbolTable {
+    SymbolTable {
+        table: HashMap::new(),
+    }
+}
+
 pub type SymbolStack = Vec<SymbolTable>;
 
 #[derive(Debug)]
-pub struct CompilerState {
+pub struct ProgramState {
     stack: SymbolStack,
     ast: Arc<ast::Root>,
 }
 
-pub fn new_state(ast: Arc<ast::Root>) -> CompilerState {
-    CompilerState {
-        stack: vec![],
-        ast: ast,
-    }
+pub fn new_state(ast: Arc<ast::Root>) -> ProgramState {
+    ProgramState { stack: vec![], ast }
 }
 
-impl CompilerState {
-    pub fn check(&self) -> Result<()> {
-        self.check_prepost(
-            self.ast.preblock.clone(),
-            self.ast.preblock.clone()
-        )?;
-        self.check_program(self.ast.program.clone())?;
-        Ok(())
-    }
+impl ProgramState {
+    pub fn build(&mut self) -> Result<()> {
+        let base_frame = new_empty_symbol_table();
 
-    fn check_prepost(&self, pre: ast::Block, post: ast::Block) -> Result<()> { 
-        let mut prepost = vec![];
-        prepost.extend(pre.clone());
-        prepost.extend(post.clone());
-        self.check_block(prepost)?;
-        Ok(())
-    }
+        // First pass: discover types and signatures of global identifiers
+        let pre_idents: Vec<Symbol> = self
+            .ast
+            .preblock
+            .iter()
+            .filter_map(|stmt| match (*stmt.clone()).clone() {
+                ast::Stmt::Assign(left_var, _) => {
+                    Some(new_symbol(left_var.type_t.clone(), left_var.ident.clone()))
+                }
+                ast::Stmt::FuncDef(func) => {
+                    Some(new_symbol(func.ret_t.clone(), func.ident.clone()))
+                }
+                _ => None,
+            })
+            .collect();
 
-    fn check_program(&self, prog: Arc<ast::Program>) -> Result<()> {
-        
-        Ok(())
-    }
-
-    fn check_block(&self, block: ast::Block) -> Result<()> {
-        for s in block {
-            self.check_stmt(s)?;
-        }
-        Ok(())
-    }
-
-    fn check_stmt(&self, stmt: Arc<ast::Stmt>) -> Result<()> {
-        match (*stmt).clone() {
-            ast::Stmt::Assign(left, right) => self.check_assign(left, right),
-            ast::Stmt::Reassign(left, op, right) => self.check_reassign(left, op, right),
-            ast::Stmt::Call(id, args) => self.check_call(id, args),
-            ast::Stmt::FuncDef(func) => self.check_funcdef(func),
-        };
-        Ok(())
-    }
-
-
-    fn check_assign(&self, left: Arc<ast::Var>, right: Arc<ast::Expr>) -> Result<()> {
-        Ok(())
-    }
-
-    fn check_reassign(&self, left: Arc<ast::Var>, op: ast::AssignOp, right: Arc<ast::Expr>) -> Result<()> {
-        Ok(())
-    }
-
-    fn check_call(&self, id: String, args: Vec<Arc<ast::Expr>>) -> Result<()> {
-        Ok(())
-    }
-
-    fn check_funcdef(&self, func: Arc<ast::Func>) -> Result<()> {
+        let post_idents: Vec<Symbol> = self
+            .ast
+            .postblock
+            .iter()
+            .filter_map(|stmt| match (*stmt.clone()).clone() {
+                ast::Stmt::Assign(left_var, _) => {
+                    Some(new_symbol(left_var.type_t.clone(), left_var.ident.clone()))
+                }
+                ast::Stmt::FuncDef(func) => {
+                    Some(new_symbol(func.ret_t.clone(), func.ident.clone()))
+                }
+                _ => None,
+            })
+            .collect();
 
         Ok(())
     }
