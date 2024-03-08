@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::semantic;
 use crate::types;
 
 pub type Block = Vec<Arc<Stmt>>;
@@ -27,7 +28,7 @@ pub struct Root {
     pub postblock: Block,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Program {
     NoWith(String, Block),
     With(String, With, Block),

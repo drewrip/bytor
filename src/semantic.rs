@@ -18,13 +18,13 @@ impl fmt::Display for SemanticError {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Var {
     type_t: types::Type,
     name: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Eq, Hash, PartialEq)]
 pub struct Symbol {
     type_t: types::Type,
     name: String,
@@ -34,7 +34,34 @@ pub fn new_symbol(type_t: types::Type, name: String) -> Symbol {
     Symbol { type_t, name }
 }
 
-#[derive(Debug)]
+pub trait Symbolic {
+    fn get_symbol(&self) -> Symbol;
+}
+
+impl Symbolic for ast::Program {
+    fn get_symbol(&self) -> Symbol {
+        match self {
+            ast::Program::NoWith(name, _) => Symbol {
+                name: name.clone(),
+                type_t: types::Type::Program(types::ProgramType { with_t: vec![] }),
+            },
+            ast::Program::With(name, with_vars, _) => Symbol {
+                name: name.clone(),
+                type_t: types::Type::Program(types::ProgramType {
+                    with_t: with_vars
+                        .iter()
+                        .map(|with_var| match *with_var.clone() {
+                            ast::WithVar::NonMut(_) => types::WithType::Imm,
+                            ast::WithVar::Mut(_) => types::WithType::Mut,
+                        })
+                        .collect(),
+                }),
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct SymbolTable {
     table: HashMap<Symbol, Var>,
 }
@@ -59,8 +86,34 @@ pub fn new_state(ast: Arc<ast::Root>) -> ProgramState {
 
 impl ProgramState {
     pub fn build(&mut self) -> Result<()> {
-        let base_frame = new_empty_symbol_table();
+        self.stack.push(new_empty_symbol_table());
+        // Find the signature of `program` blocks
+        //  -> if there are none, we can abort compilation :)
+        self.program_signature_discovery()?;
+        // Discover the functions and variables in the global scope
+        //  -> but, don't parse function bodies
+        self.global_ident_discovery()?;
 
+        Ok(())
+    }
+
+    fn program_signature_discovery(&mut self) -> Result<()> {
+        let prog_symbol = self.ast.program.get_symbol();
+        self.stack
+            .first_mut()
+            .expect("No base frame found!")
+            .table
+            .insert(
+                prog_symbol,
+                Var {
+                    type_t: types::Type::UInt64,
+                    name: String::from("foo"),
+                },
+            );
+        Ok(())
+    }
+
+    fn global_ident_discovery(&mut self) -> Result<()> {
         // First pass: discover types and signatures of global identifiers
         let pre_idents: Vec<Symbol> = self
             .ast
@@ -92,6 +145,27 @@ impl ProgramState {
             })
             .collect();
 
+        let base_frame = self.stack.first_mut().expect("No base frame!");
+
+        for pre_ident in pre_idents {
+            base_frame.table.insert(
+                pre_ident,
+                Var {
+                    type_t: types::Type::UInt64,
+                    name: String::from("foo"),
+                },
+            );
+        }
+
+        for post_ident in post_idents {
+            base_frame.table.insert(
+                post_ident,
+                Var {
+                    type_t: types::Type::UInt64,
+                    name: String::from("foo"),
+                },
+            );
+        }
         Ok(())
     }
 }

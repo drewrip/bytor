@@ -31,7 +31,7 @@ fn main() {
     state.build();
     println!("{:?}", state);
     // Generate code
-    codegen::build();
+    codegen::gen();
 }
 
 #[test]
