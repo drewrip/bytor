@@ -52,6 +52,9 @@ impl ProgramState {
         //  -> but, don't parse function bodies
         self.global_ident_discovery()?;
 
+        // Now we can 'recursively' check the bodies of the
+        // globally defined variables, functions and 'programs'.
+        self.check_global_definitions()?;
         Ok(())
     }
 
@@ -110,6 +113,10 @@ impl ProgramState {
                 },
             );
         }
+        Ok(())
+    }
+
+    fn check_global_definitions(&mut self) -> Result<()> {
         Ok(())
     }
 }

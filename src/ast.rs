@@ -55,6 +55,7 @@ pub enum Expr {
 
 #[derive(Debug)]
 pub enum Term {
+    Id(String),
     Num(i32),
     Expr(Arc<Expr>),
 }

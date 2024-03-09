@@ -95,6 +95,7 @@ pub Expr: Arc<Expr> = {
 };
 
 pub Term: Arc<Term> = {
+    <id:Id> => Arc::new(Term::Id(id)),
     <n:Num> => Arc::new(Term::Num(n)),
     "(" <t:Expr> ")" => Arc::new(Term::Expr(t)),
 };
