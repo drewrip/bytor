@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use crate::semantic;
+use crate::symbol::Var;
 use crate::types;
 
 pub type Block = Vec<Arc<Stmt>>;
@@ -38,7 +39,7 @@ pub type With = Vec<Arc<WithVar>>;
 
 #[derive(Debug)]
 pub enum WithVar {
-    NonMut(String),
+    Imm(String),
     Mut(String),
 }
 
@@ -84,10 +85,4 @@ pub struct Func {
     pub with: With,
     pub ident: String,
     pub block: Block,
-}
-
-#[derive(Debug)]
-pub struct Var {
-    pub type_t: types::Type,
-    pub ident: String,
 }

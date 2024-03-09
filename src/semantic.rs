@@ -3,6 +3,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use crate::ast;
+use crate::symbol::{new_symbol, Symbol, Symbolic, Var};
 use crate::types;
 
 type Result<T> = std::result::Result<T, SemanticError>;
@@ -19,51 +20,8 @@ impl fmt::Display for SemanticError {
 }
 
 #[derive(Debug, Clone)]
-pub struct Var {
-    type_t: types::Type,
-    name: String,
-}
-
-#[derive(Debug, Clone, Eq, Hash, PartialEq)]
-pub struct Symbol {
-    type_t: types::Type,
-    name: String,
-}
-
-pub fn new_symbol(type_t: types::Type, name: String) -> Symbol {
-    Symbol { type_t, name }
-}
-
-pub trait Symbolic {
-    fn get_symbol(&self) -> Symbol;
-}
-
-impl Symbolic for ast::Program {
-    fn get_symbol(&self) -> Symbol {
-        match self {
-            ast::Program::NoWith(name, _) => Symbol {
-                name: name.clone(),
-                type_t: types::Type::Program(types::ProgramType { with_t: vec![] }),
-            },
-            ast::Program::With(name, with_vars, _) => Symbol {
-                name: name.clone(),
-                type_t: types::Type::Program(types::ProgramType {
-                    with_t: with_vars
-                        .iter()
-                        .map(|with_var| match *with_var.clone() {
-                            ast::WithVar::NonMut(_) => types::WithType::Imm,
-                            ast::WithVar::Mut(_) => types::WithType::Mut,
-                        })
-                        .collect(),
-                }),
-            },
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
 pub struct SymbolTable {
-    table: HashMap<Symbol, Var>,
+    pub table: HashMap<Symbol, Var>,
 }
 
 pub fn new_empty_symbol_table() -> SymbolTable {
@@ -76,8 +34,8 @@ pub type SymbolStack = Vec<SymbolTable>;
 
 #[derive(Debug)]
 pub struct ProgramState {
-    stack: SymbolStack,
-    ast: Arc<ast::Root>,
+    pub stack: SymbolStack,
+    pub ast: Arc<ast::Root>,
 }
 
 pub fn new_state(ast: Arc<ast::Root>) -> ProgramState {
@@ -98,18 +56,20 @@ impl ProgramState {
     }
 
     fn program_signature_discovery(&mut self) -> Result<()> {
-        let prog_symbol = self.ast.program.get_symbol();
-        self.stack
-            .first_mut()
-            .expect("No base frame found!")
-            .table
-            .insert(
-                prog_symbol,
-                Var {
-                    type_t: types::Type::UInt64,
-                    name: String::from("foo"),
-                },
-            );
+        let gen_prog_symbol = self.ast.program.get_symbol();
+        if let Some(prog_symbol) = gen_prog_symbol {
+            self.stack
+                .first_mut()
+                .expect("No base frame found!")
+                .table
+                .insert(
+                    prog_symbol,
+                    Var {
+                        type_t: types::Type::UInt64,
+                        name: String::from("prog"),
+                    },
+                );
+        }
         Ok(())
     }
 
@@ -119,39 +79,23 @@ impl ProgramState {
             .ast
             .preblock
             .iter()
-            .filter_map(|stmt| match (*stmt.clone()).clone() {
-                ast::Stmt::Assign(left_var, _) => {
-                    Some(new_symbol(left_var.type_t.clone(), left_var.ident.clone()))
-                }
-                ast::Stmt::FuncDef(func) => {
-                    Some(new_symbol(func.ret_t.clone(), func.ident.clone()))
-                }
-                _ => None,
-            })
+            .filter_map(|stmt| stmt.get_symbol())
             .collect();
 
         let post_idents: Vec<Symbol> = self
             .ast
             .postblock
             .iter()
-            .filter_map(|stmt| match (*stmt.clone()).clone() {
-                ast::Stmt::Assign(left_var, _) => {
-                    Some(new_symbol(left_var.type_t.clone(), left_var.ident.clone()))
-                }
-                ast::Stmt::FuncDef(func) => {
-                    Some(new_symbol(func.ret_t.clone(), func.ident.clone()))
-                }
-                _ => None,
-            })
+            .filter_map(|stmt| stmt.get_symbol())
             .collect();
 
         let base_frame = self.stack.first_mut().expect("No base frame!");
 
         for pre_ident in pre_idents {
             base_frame.table.insert(
-                pre_ident,
+                pre_ident.clone(),
                 Var {
-                    type_t: types::Type::UInt64,
+                    type_t: pre_ident.type_t,
                     name: String::from("foo"),
                 },
             );
@@ -159,9 +103,9 @@ impl ProgramState {
 
         for post_ident in post_idents {
             base_frame.table.insert(
-                post_ident,
+                post_ident.clone(),
                 Var {
-                    type_t: types::Type::UInt64,
+                    type_t: post_ident.type_t,
                     name: String::from("foo"),
                 },
             );

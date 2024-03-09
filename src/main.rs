@@ -6,6 +6,7 @@ use lalrpop_util::lalrpop_mod;
 pub mod ast;
 pub mod codegen;
 pub mod semantic;
+pub mod symbol;
 pub mod types;
 
 /// Compiler for the Rascal language
@@ -29,7 +30,13 @@ fn main() {
     let mut state = semantic::new_state(root);
     // Perform semantic checks and type checking
     state.build();
-    println!("{:?}", state);
+    for frame in state.stack {
+        for (k, v) in frame.table {
+            println!("{:?}: {:?}", k, v);
+        }
+        println!("===================")
+    }
+
     // Generate code
     codegen::gen();
 }
