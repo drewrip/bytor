@@ -2,7 +2,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use crate::ast::*;
 use crate::types::*;
-use crate::symbol::Var;
+use crate::symbol::{Symbol, Var};
 
 grammar;
 
@@ -37,10 +37,26 @@ Comma<T>: Vec<T> = {
 
 pub Stmt: Arc<Stmt> = {
     "let" <i:Id> "=" <e:Expr> => Arc::new(
-        Stmt::Assign(Arc::new(Var{type_t: Type::Int64, name: i}), e)
+        Stmt::Assign(
+          Arc::new(Symbol{name: i}),
+          Arc::new(Var{type_t: Type::Unknown, node: Node::ExprNode(e.clone())}),
+          e
+        )
+    ),
+    "let" <i:Id> ":" <t:Type> "=" <e:Expr> => Arc::new(
+        Stmt::Assign(
+          Arc::new(Symbol{name: i}),
+          Arc::new(Var{type_t: t, node: Node::ExprNode(e.clone())}),
+          e
+        )
     ),
     <i:Id> <ao:AssignOp> <e:Expr> => Arc::new(
-        Stmt::Reassign(Arc::new(Var{type_t: Type::Int64, name: i}), ao, e)
+        Stmt::Reassign(
+          Arc::new(Symbol{name: i}),
+          Arc::new(Var{type_t: Type::Unknown, node: Node::ExprNode(e.clone())}),
+          ao,
+          e
+        )
     ),
     <id:Id> "(" <e:Exprs> ")" => Arc::new(Stmt::Call(id, e)),
     <f:Func> => Arc::new(Stmt::FuncDef(f)),
@@ -64,8 +80,8 @@ pub WithVar: Arc<WithVar> = {
 
 pub Params: Params = Comma<Param>;
 
-pub Param: Arc<Var> = {
-    <id:Id> ":" <t:Type> => Arc::new(Var{type_t: t, name: id}),
+pub Param: Arc<Param> = {
+    <id:Id> ":" <t:Type> => Arc::new(Param{type_t: t, name: id}),
 };
 
 pub Func: Arc<Func> = {

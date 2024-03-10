@@ -1,28 +1,27 @@
 use std::sync::Arc;
 
 use crate::semantic;
-use crate::symbol::Var;
+use crate::symbol::{Symbol, Var};
 use crate::types;
 
 pub type Block = Vec<Arc<Stmt>>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Node {
     RootNode(Root),
     ProgramNode(Program),
     WithNode(With),
     WithVarNode(WithVar),
     BlockNode(Block),
-    ExprNode(Expr),
+    ExprNode(Arc<Expr>),
     AssignOpNode(AssignOp),
     StmtNode(Stmt),
     ParamsNode(Params),
     FuncNode(Func),
-    VarNode(Var),
     TypeNode(types::Type),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Root {
     pub preblock: Block,
     pub program: Arc<Program>,
@@ -37,13 +36,13 @@ pub enum Program {
 
 pub type With = Vec<Arc<WithVar>>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum WithVar {
     Imm(String),
     Mut(String),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expr {
     Term(Arc<Term>),
     Add(Arc<Expr>, Arc<Expr>),
@@ -71,15 +70,21 @@ pub enum AssignOp {
 
 #[derive(Debug, Clone)]
 pub enum Stmt {
-    Assign(Arc<Var>, Arc<Expr>),
-    Reassign(Arc<Var>, AssignOp, Arc<Expr>),
+    Assign(Arc<Symbol>, Arc<Var>, Arc<Expr>),
+    Reassign(Arc<Symbol>, Arc<Var>, AssignOp, Arc<Expr>),
     Call(String, Vec<Arc<Expr>>),
     FuncDef(Arc<Func>),
 }
 
-pub type Params = Vec<Arc<Var>>;
+pub type Params = Vec<Arc<Param>>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
+pub struct Param {
+    pub type_t: types::Type,
+    pub name: String,
+}
+
+#[derive(Debug, Clone)]
 pub struct Func {
     pub ret_t: types::Type,
     pub params: Params,
