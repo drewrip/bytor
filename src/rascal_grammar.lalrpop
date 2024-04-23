@@ -14,6 +14,7 @@ pub Root: Arc<Root> = {
 
 pub Stmts = Semicolon<Stmt>;
 pub Exprs = Comma<Expr>;
+pub Args = Exprs;
 
 Semicolon<T>: Vec<T> = {
     <mut v:(<T> ";")*> <e:T?> => match e {
@@ -38,33 +39,33 @@ Comma<T>: Vec<T> = {
 pub Stmt: Arc<Stmt> = {
     "let" <i:Id> "=" <e:Expr> => Arc::new(
         Stmt::Assign(
-          Arc::new(Symbol{name: i}),
+          Symbol{ident: i},
           Arc::new(Var{type_t: Type::Unknown, node: Node::ExprNode(e.clone())}),
           e
         )
     ),
     "let" <i:Id> ":" <t:Type> "=" <e:Expr> => Arc::new(
         Stmt::Assign(
-          Arc::new(Symbol{name: i}),
+          Symbol{ident: i},
           Arc::new(Var{type_t: t, node: Node::ExprNode(e.clone())}),
           e
         )
     ),
     <i:Id> <ao:AssignOp> <e:Expr> => Arc::new(
         Stmt::Reassign(
-          Arc::new(Symbol{name: i}),
+          Symbol{ident: i},
           Arc::new(Var{type_t: Type::Unknown, node: Node::ExprNode(e.clone())}),
           ao,
           e
         )
     ),
-    <id:Id> "(" <e:Exprs> ")" => Arc::new(Stmt::Call(id, e)),
+    <id:Id> "(" <args:Args> ")" => Arc::new(Stmt::Call(Symbol{ident: id}, Arc::new(args))),
     <f:Func> => Arc::new(Stmt::FuncDef(f)),
 };
 
 pub Program: Arc<Program> = {
-    "program" <id:Id> <b:Stmts> "end" => Arc::new(Program::NoWith(id, b)),
-    "program" <id:Id> <w:With> <b:Stmts> "end" => Arc::new(Program::With(id, w, b)),
+    "program" <id:Id> <b:Stmts> "end" => Arc::new(Program::NoWith(Symbol{ident: id}, b)),
+    "program" <id:Id> <w:With> <b:Stmts> "end" => Arc::new(Program::With(Symbol{ident: id}, w, b)),
 };
 
 pub With: With = {
@@ -74,8 +75,8 @@ pub With: With = {
 pub WithVars = Comma<WithVar>;
 
 pub WithVar: Arc<WithVar> = {
-    "mut" <id:Id> => Arc::new(WithVar::Mut(id)),
-    <id:Id> => Arc::new(WithVar::Imm(id)),
+    "mut" <id:Id> => Arc::new(WithVar::Mut(Symbol{ident: id})),
+    <id:Id> => Arc::new(WithVar::Imm(Symbol{ident: id})),
 };
 
 pub Params: Params = Comma<Param>;
@@ -101,7 +102,7 @@ pub Func: Arc<Func> = {
 pub Expr: Arc<Expr> = {
     #[precedence(level="0")] // Highest precedence
     <t:Term> => Arc::new(Expr::Term(t)),
-    <id:Id> "(" <e:Exprs> ")" => Arc::new(Expr::Call(id, e)),
+    <id:Id> "(" <args:Args> ")" => Arc::new(Expr::Call(Symbol{ident: id}, Arc::new(args))),
     #[precedence(level="1")] #[assoc(side="left")]
     <l:Expr> "*" <r:Expr> => Arc::new(Expr::Mult(l, r)),
     <l:Expr> "/" <r:Expr> => Arc::new(Expr::Div(l, r)),

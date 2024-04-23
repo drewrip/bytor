@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::ast;
 use crate::types;
 
@@ -23,11 +25,11 @@ pub fn new_var(type_t: types::Type, node: ast::Node) -> Var {
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq)]
 pub struct Symbol {
-    pub name: String,
+    pub ident: String,
 }
 
-pub fn new_symbol(name: String) -> Symbol {
-    Symbol { name }
+pub fn new_symbol(ident: String) -> Symbol {
+    Symbol { ident }
 }
 
 pub trait Symbolic {
@@ -37,15 +39,15 @@ pub trait Symbolic {
 impl Symbolic for ast::Program {
     fn get_symbol(&self) -> Option<IdentMapping> {
         match self {
-            ast::Program::NoWith(name, block) => Some(IdentMapping {
-                symbol: Symbol { name: name.clone() },
+            ast::Program::NoWith(ident, block) => Some(IdentMapping {
+                symbol: ident.clone(),
                 var: Var {
                     type_t: types::Type::Program(types::ProgramType { with_t: vec![] }),
-                    node: ast::Node::BlockNode(block.to_vec()),
+                    node: ast::Node::BlockNode(Arc::new(block.clone())),
                 },
             }),
-            ast::Program::With(name, with_vars, block) => Some(IdentMapping {
-                symbol: Symbol { name: name.clone() },
+            ast::Program::With(ident, with_vars, block) => Some(IdentMapping {
+                symbol: ident.clone(),
                 var: Var {
                     type_t: types::Type::Program(types::ProgramType {
                         with_t: with_vars
@@ -56,7 +58,7 @@ impl Symbolic for ast::Program {
                             })
                             .collect(),
                     }),
-                    node: ast::Node::BlockNode(block.to_vec()),
+                    node: ast::Node::BlockNode(Arc::new(block.to_vec())),
                 },
             }),
         }
@@ -67,12 +69,12 @@ impl Symbolic for ast::Stmt {
     fn get_symbol(&self) -> Option<IdentMapping> {
         match self {
             ast::Stmt::Assign(symbol, var, expr) => Some(IdentMapping {
-                symbol: (*symbol.clone()).clone(),
+                symbol: symbol.clone(),
                 var: (*var.clone()).clone(),
             }),
             ast::Stmt::FuncDef(func) => Some(IdentMapping {
                 symbol: Symbol {
-                    name: func.ident.clone(),
+                    ident: func.ident.clone(),
                 },
                 var: Var {
                     type_t: types::Type::Function(types::FunctionType {
@@ -91,7 +93,7 @@ impl Symbolic for ast::Stmt {
                             })
                             .collect(),
                     }),
-                    node: ast::Node::BlockNode(func.block.clone()),
+                    node: ast::Node::BlockNode(Arc::new(func.block.clone())),
                 },
             }),
             _ => None,
