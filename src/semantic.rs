@@ -3,7 +3,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use crate::ast;
-use crate::symbol::{new_symbol, IdentMapping, Symbol, Symbolic, Var};
+use crate::symbol::{new_symbol, new_var, IdentMapping, Symbol, Symbolic, Var};
 use crate::types;
 
 type Result<T> = std::result::Result<T, SemanticError>;
@@ -57,6 +57,16 @@ impl ProgramState {
             .expect("No frames in symbol table!")
             .table
             .insert(symbol, var)
+    }
+
+    pub fn spush(&mut self) -> Result<()> {
+        self.stack.push(new_empty_symbol_table());
+        Ok(())
+    }
+
+    pub fn spop(&mut self) -> Result<()> {
+        self.stack.pop();
+        Ok(())
     }
 
     pub fn build(&mut self) -> Result<()> {
@@ -150,10 +160,15 @@ impl ProgramState {
                     ast::Node::StmtNode(stmt) => self.check_stmt(&mut stack, idx, (*stmt).clone()),
                     ast::Node::ExprNode(expr) => self.check_expr(&mut stack, idx, (*expr).clone()),
                     ast::Node::TermNode(term) => self.check_term(&mut stack, idx, (*term).clone()),
-                    _ => panic!("AST node not yet implemented!"),
+                    ast::Node::BlockNode(block) => {
+                        self.check_block(&mut stack, idx, (*block).clone())
+                    }
+                    ast::Node::FuncNode(func) => self.check_func(&mut stack, idx, (*func).clone()),
+                    _ => {
+                        println!("node -> {:?}", frame.node.clone());
+                        panic!("AST node not yet implemented!")
+                    }
                 };
-
-                println!("{:?}", stack);
             }
         }
 
@@ -193,42 +208,82 @@ impl ProgramState {
                     // Both sub expressions checked!
                     let oper1 = stack.pop().unwrap().get_type();
                     stack.get_mut(frame_idx).unwrap().set_checked();
-                    stack.get_mut(frame_idx).unwrap().set_type(oper1);
+                    stack.get_mut(frame_idx).unwrap().set_type(oper1.clone());
                     // Don't increase the parent, because there isn't one right now
-                    stack.pop(); // var
-                    stack.pop(); // symbol
+                    let mut var = match stack.pop().unwrap().node {
+                        ast::Node::VarNode(var) => (*var).clone(),
+                        _ => panic!("no var!"),
+                    };
+                    var.type_t = oper1;
+                    let symbol = match stack.pop().unwrap().node {
+                        ast::Node::SymbolNode(symbol) => symbol,
+                        _ => panic!("no symbol!"),
+                    };
                     stack.pop(); // stmt
+                    self.sinsert(symbol, var);
+                    stack
+                        .iter_mut()
+                        .rev()
+                        .find(|x| !x.get_checked())
+                        .map(|x| x.inc_prog());
                 }
             }
             ast::Stmt::Reassign(symbol, var, assign_op, expr) => {
-                stack.get_mut(frame_idx).unwrap().set_total(4);
-                stack.push(ast::new_frame(
-                    ast::Node::SymbolNode(symbol),
-                    types::Type::Unknown,
-                    0,
-                    true,
-                ));
-                stack.get_mut(frame_idx).unwrap().set_prog(1);
-                stack.push(ast::new_frame(
-                    ast::Node::VarNode(var),
-                    types::Type::Unknown,
-                    0,
-                    true,
-                ));
-                stack.get_mut(frame_idx).unwrap().set_prog(2);
-                stack.push(ast::new_frame(
-                    ast::Node::AssignOpNode(assign_op),
-                    types::Type::Unknown,
-                    0,
-                    true,
-                ));
-                stack.get_mut(frame_idx).unwrap().set_prog(3);
-                stack.push(ast::new_frame(
-                    ast::Node::ExprNode(expr),
-                    types::Type::Unknown,
-                    0,
-                    false,
-                ));
+                if progress == 0 {
+                    stack.get_mut(frame_idx).unwrap().set_total(1);
+                    stack.push(ast::new_frame(
+                        ast::Node::SymbolNode(symbol),
+                        types::Type::Unknown,
+                        0,
+                        true,
+                    ));
+                    stack.push(ast::new_frame(
+                        ast::Node::VarNode(var),
+                        types::Type::Unknown,
+                        0,
+                        true,
+                    ));
+                    stack.push(ast::new_frame(
+                        ast::Node::AssignOpNode(assign_op),
+                        types::Type::Unknown,
+                        0,
+                        true,
+                    ));
+                    stack.push(ast::new_frame(
+                        ast::Node::ExprNode(expr),
+                        types::Type::Unknown,
+                        0,
+                        false,
+                    ));
+                } else if progress == 1 {
+                    // Both sub expressions checked!
+                    let oper1 = stack.pop().unwrap().get_type();
+
+                    // Later we must also check that the assign_op is defined for the types
+                    stack.pop(); // assign_op
+                    stack.pop(); // var
+                    let symbol = match stack.pop().unwrap().node {
+                        ast::Node::SymbolNode(symbol) => symbol,
+                        _ => panic!("stack frame isn't symbol"),
+                    };
+                    let lookup_type = match self.slookup(symbol) {
+                        Some(var) => var.type_t.clone(),
+                        None => panic!("ident not found!"),
+                    };
+                    if oper1 != lookup_type {
+                        println!("{:?}", self.stack);
+                        panic!("type error!");
+                    }
+                    stack.get_mut(frame_idx).unwrap().set_checked();
+                    stack.get_mut(frame_idx).unwrap().set_type(oper1);
+                    stack.pop(); // stmt
+                                 // Don't increment progress of parent
+                    stack
+                        .iter_mut()
+                        .rev()
+                        .find(|x| !x.get_checked())
+                        .map(|x| x.inc_prog());
+                }
             }
             ast::Stmt::Call(ident, args) => {
                 stack.get_mut(frame_idx).unwrap().set_total(2);
@@ -247,13 +302,43 @@ impl ProgramState {
                 ));
             }
             ast::Stmt::FuncDef(func) => {
-                stack.get_mut(frame_idx).unwrap().set_total(1);
-                stack.push(ast::new_frame(
-                    ast::Node::FuncNode(func),
-                    types::Type::Unknown,
-                    0,
-                    false,
-                ));
+                if progress == 0 {
+                    stack.get_mut(frame_idx).unwrap().set_total(1);
+                    let params = func.params.iter().map(|p| p.type_t.clone()).collect();
+                    let return_t = func.ret_t.clone();
+                    let symbol = new_symbol(func.ident.clone());
+                    let block = func.block.clone();
+                    let function_type = types::Type::Function(types::FunctionType {
+                        params_t: params,
+                        return_t: vec![return_t],
+                        with_t: vec![],
+                    });
+                    self.sinsert(
+                        new_symbol(func.ident.clone()),
+                        new_var(
+                            function_type.clone(),
+                            stack.get(frame_idx).unwrap().node.clone(),
+                        ),
+                    );
+                    stack.push(ast::new_frame(
+                        ast::Node::FuncNode(func),
+                        function_type,
+                        0,
+                        false,
+                    ));
+                } else if progress == 1 {
+                    // Both sub expressions checked!
+                    let func_type = stack.pop().unwrap().get_type();
+                    stack.get_mut(frame_idx).unwrap().set_checked();
+                    stack.get_mut(frame_idx).unwrap().set_type(func_type);
+                    stack.pop(); // stmt
+                                 // Don't increment progress of parent, there might not be one!
+                    stack
+                        .iter_mut()
+                        .rev()
+                        .find(|x| !x.get_checked())
+                        .map(|x| x.inc_prog());
+                }
             }
         }
 
@@ -320,6 +405,20 @@ impl ProgramState {
                     ));
                 } else if progress == 2 {
                     // Both sub expressions checked!
+                    let oper1 = stack.pop().unwrap().get_type();
+                    let oper2 = stack.pop().unwrap().get_type();
+                    if oper1 != oper2 {
+                        panic!("type error!");
+                    }
+                    stack.get_mut(frame_idx).unwrap().set_checked();
+                    stack.get_mut(frame_idx).unwrap().set_type(oper1);
+                    // Increment progress of parent
+                    stack
+                        .iter_mut()
+                        .rev()
+                        .find(|x| !x.get_checked())
+                        .unwrap()
+                        .inc_prog();
                 }
             }
             ast::Expr::Mult(lhs, rhs) => {
@@ -374,6 +473,20 @@ impl ProgramState {
                     ));
                 } else if progress == 2 {
                     // Both sub expressions checked!
+                    let oper1 = stack.pop().unwrap().get_type();
+                    let oper2 = stack.pop().unwrap().get_type();
+                    if oper1 != oper2 {
+                        panic!("type error!");
+                    }
+                    stack.get_mut(frame_idx).unwrap().set_checked();
+                    stack.get_mut(frame_idx).unwrap().set_type(oper1);
+                    // Increment progress of parent
+                    stack
+                        .iter_mut()
+                        .rev()
+                        .find(|x| !x.get_checked())
+                        .unwrap()
+                        .inc_prog();
                 }
             }
             ast::Expr::Term(term) => {
@@ -472,6 +585,70 @@ impl ProgramState {
                         .inc_prog();
                 }
             }
+        }
+        Ok(())
+    }
+
+    fn check_block(
+        &mut self,
+        stack: &mut Vec<ast::Frame>,
+        frame_idx: usize,
+        block: ast::Block,
+    ) -> Result<()> {
+        let progress = stack.get_mut(frame_idx).unwrap().get_prog();
+        if progress == 0 {
+            stack.get_mut(frame_idx).unwrap().set_total(1);
+            self.spush();
+            for stmt in block.iter().rev() {
+                stack.push(ast::new_frame(
+                    ast::Node::StmtNode(stmt.clone()),
+                    types::Type::Unknown,
+                    0,
+                    false,
+                ));
+            }
+        } else if progress == 1 {
+            self.spop();
+            stack.get_mut(frame_idx).unwrap().set_checked();
+            // Increment progress of parent
+            stack
+                .iter_mut()
+                .rev()
+                .find(|x| !x.get_checked())
+                .unwrap()
+                .inc_prog();
+        }
+
+        Ok(())
+    }
+
+    fn check_func(
+        &mut self,
+        stack: &mut Vec<ast::Frame>,
+        frame_idx: usize,
+        func: ast::Func,
+    ) -> Result<()> {
+        let progress = stack.get_mut(frame_idx).unwrap().get_prog();
+        if progress == 0 {
+            stack.get_mut(frame_idx).unwrap().set_total(1);
+            let block = func.block;
+            stack.push(ast::new_frame(
+                ast::Node::BlockNode(block.into()),
+                types::Type::Unknown,
+                0,
+                false,
+            ));
+        } else if progress == 1 {
+            // Both sub expressions checked!
+            stack.pop();
+            stack.get_mut(frame_idx).unwrap().set_checked();
+            // Increment progress of parent
+            stack
+                .iter_mut()
+                .rev()
+                .find(|x| !x.get_checked())
+                .unwrap()
+                .inc_prog();
         }
         Ok(())
     }

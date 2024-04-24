@@ -30,6 +30,7 @@ fn main() {
     let mut state = semantic::new_state(root);
     // Perform semantic checks and type checking
     state.build();
+    println!("===================");
     for frame in state.stack {
         for (k, v) in frame.table {
             println!("{:?}: {:?}", k, v);

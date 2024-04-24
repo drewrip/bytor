@@ -1,0 +1,17 @@
+let x = 3 * (4 + 5);
+x = 6 + 5949;
+let some_long = 4 / (5 * (676 - 3) + 2 / 3);
+
+function baz(x: int64, y: int64) -> int64
+  let z = 4 * (4 / 5);
+end
+
+program test_program
+end
+
+function foo(n: int32) -> int32
+  let note = 2 + n;
+  note *= 4;
+end
+
+let test_call = foo(4);
