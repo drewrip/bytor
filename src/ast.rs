@@ -144,7 +144,7 @@ pub type Params = Vec<Arc<Param>>;
 #[derive(Debug, Clone)]
 pub struct Param {
     pub type_t: types::Type,
-    pub name: String,
+    pub ident: String,
 }
 
 #[derive(Debug, Clone)]

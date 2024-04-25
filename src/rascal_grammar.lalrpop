@@ -12,12 +12,15 @@ pub Root: Arc<Root> = {
     ),
 };
 
-pub Stmts = Semicolon<Stmt>;
+pub Stmts: Vec<Arc<Stmt>> = {
+    <v:(<Stmt>)*> => v,
+}
+
 pub Exprs = Comma<Expr>;
 pub Args = Exprs;
 
 Semicolon<T>: Vec<T> = {
-    <mut v:(<T> ";")*> <e:T?> => match e {
+    <mut v:(<T> ";")*> <e:(<T> ";")?> => match e {
         None => v,
         Some(e) => {
             v.push(e);
@@ -37,21 +40,21 @@ Comma<T>: Vec<T> = {
 };
 
 pub Stmt: Arc<Stmt> = {
-    "let" <i:Id> "=" <e:Expr> => Arc::new(
+    "let" <i:Id> "=" <e:Expr> ";" => Arc::new(
         Stmt::Assign(
           Symbol{ident: i},
           Arc::new(Var{type_t: Type::Unknown, node: Node::ExprNode(e.clone())}),
           e
         )
     ),
-    "let" <i:Id> ":" <t:Type> "=" <e:Expr> => Arc::new(
+    "let" <i:Id> ":" <t:Type> "=" <e:Expr> ";" => Arc::new(
         Stmt::Assign(
           Symbol{ident: i},
           Arc::new(Var{type_t: t, node: Node::ExprNode(e.clone())}),
           e
         )
     ),
-    <i:Id> <ao:AssignOp> <e:Expr> => Arc::new(
+    <i:Id> <ao:AssignOp> <e:Expr> ";" => Arc::new(
         Stmt::Reassign(
           Symbol{ident: i},
           Arc::new(Var{type_t: Type::Unknown, node: Node::ExprNode(e.clone())}),
@@ -59,7 +62,7 @@ pub Stmt: Arc<Stmt> = {
           e
         )
     ),
-    <id:Id> "(" <args:Args> ")" => Arc::new(Stmt::Call(Symbol{ident: id}, Arc::new(args))),
+    <id:Id> "(" <args:Args> ")" ";" => Arc::new(Stmt::Call(Symbol{ident: id}, Arc::new(args))),
     <f:Func> => Arc::new(Stmt::FuncDef(f)),
 };
 
@@ -82,7 +85,7 @@ pub WithVar: Arc<WithVar> = {
 pub Params: Params = Comma<Param>;
 
 pub Param: Arc<Param> = {
-    <id:Id> ":" <t:Type> => Arc::new(Param{type_t: t, name: id}),
+    <id:Id> ":" <t:Type> => Arc::new(Param{type_t: t, ident: id}),
 };
 
 pub Func: Arc<Func> = {

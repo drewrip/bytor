@@ -7,6 +7,8 @@ function baz(x: int64, y: int64) -> int64
 end
 
 program test_program
+  let working = foo(2);
+  let another_var = flag;
 end
 
 function foo(n: int32) -> int32
@@ -15,3 +17,5 @@ function foo(n: int32) -> int32
 end
 
 let test_call = foo(4);
+
+let flag = foo(foo(2));
