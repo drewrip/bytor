@@ -185,6 +185,7 @@ impl ProgramState {
         let mut stack: Vec<ast::Frame> = vec![];
         let mut frame: ast::Frame = ast::new_frame(node.clone(), types::Type::Unknown, 0, false);
         let mut idx: usize = 0;
+        self.spush();
         stack.push(frame.clone());
         while !stack.is_empty() && stack.iter().any(|f| !f.get_checked()) {
             let (new_idx, new_frame) = stack
@@ -259,13 +260,13 @@ impl ProgramState {
                     stack.get_mut(frame_idx).unwrap().set_total(1);
                     stack.push(ast::new_frame(
                         ast::Node::SymbolNode(symbol),
-                        types::Type::Unknown,
+                        var.type_t.clone(),
                         0,
                         true,
                     ));
                     stack.push(ast::new_frame(
-                        ast::Node::VarNode(var),
-                        types::Type::Unknown,
+                        ast::Node::VarNode(var.clone()),
+                        var.type_t.clone(),
                         0,
                         true,
                     ));
@@ -278,18 +279,27 @@ impl ProgramState {
                 } else if progress == 1 {
                     // Both sub expressions checked!
                     let oper1 = stack.pop().unwrap().get_type();
-                    stack.get_mut(frame_idx).unwrap().set_checked();
-                    stack.get_mut(frame_idx).unwrap().set_type(oper1.clone());
                     // Don't increase the parent, because there isn't one right now
-                    let mut var = match stack.pop().unwrap().node {
+                    let var_frame = stack.pop().unwrap();
+                    println!("var frame : {:?}", var_frame);
+                    let mut var = match var_frame.node {
                         ast::Node::VarNode(var) => (*var).clone(),
                         _ => panic!("no var!"),
                     };
-                    var.type_t = oper1;
+                    if oper1 != var_frame.type_t && var_frame.type_t != types::Type::Unknown {
+                        println!(
+                            "declared -> {:?}, expression -> {:?}",
+                            var_frame.type_t, oper1
+                        );
+                        panic!("type of expression doesn't match declared type");
+                    }
+                    var.type_t = oper1.clone();
                     let symbol = match stack.pop().unwrap().node {
                         ast::Node::SymbolNode(symbol) => symbol,
                         _ => panic!("no symbol!"),
                     };
+                    stack.get_mut(frame_idx).unwrap().set_checked();
+                    stack.get_mut(frame_idx).unwrap().set_type(oper1.clone());
                     stack.pop(); // stmt
                     self.sinsert(symbol, var);
                 }
@@ -345,7 +355,7 @@ impl ProgramState {
                 }
             }
             ast::Stmt::Call(symbol, args) => {
-                let func_var = self.slookup(symbol).unwrap();
+                let func_var = self.slookup(symbol.clone()).unwrap();
                 let func_type = match func_var.type_t.clone() {
                     types::Type::Function(func_type) => func_type,
                     _ => panic!("not a function!"),
@@ -577,7 +587,6 @@ impl ProgramState {
                 for (arg_expr, param_type) in args.iter().zip(param_types) {
                     let arg_type = self.resolve_expr((**arg_expr).clone()).unwrap();
                     if param_type != arg_type {
-                        println!("param -> {:?}, type -> {:?}", arg_expr, arg_type);
                         panic!(
                             "argument to function {}(...) is incorrect type",
                             symbol.ident
@@ -606,24 +615,22 @@ impl ProgramState {
         let progress = stack.get_mut(frame_idx).unwrap().get_prog();
         match term {
             ast::Term::Id(ident) => {
-                if progress == 0 {
-                    stack.get_mut(frame_idx).unwrap().set_total(0);
-                    // Lookup type of identifier
-                    let lookup_type = match self.slookup(new_symbol(ident.clone())) {
-                        Some(var) => var.type_t.clone(),
-                        None => panic!("ident not found! -> {:?}", ident),
-                    };
+                stack.get_mut(frame_idx).unwrap().set_total(0);
+                // Lookup type of identifier
+                let lookup_type = match self.slookup(new_symbol(ident.clone())) {
+                    Some(var) => var.type_t.clone(),
+                    None => panic!("ident not found! -> {:?}", ident),
+                };
 
-                    stack.get_mut(frame_idx).unwrap().set_checked();
-                    stack.get_mut(frame_idx).unwrap().set_type(lookup_type);
-                    // Increment progress of parent
-                    stack
-                        .iter_mut()
-                        .rev()
-                        .find(|x| !x.get_checked())
-                        .unwrap()
-                        .inc_prog();
-                }
+                stack.get_mut(frame_idx).unwrap().set_checked();
+                stack.get_mut(frame_idx).unwrap().set_type(lookup_type);
+                // Increment progress of parent
+                stack
+                    .iter_mut()
+                    .rev()
+                    .find(|x| !x.get_checked())
+                    .unwrap()
+                    .inc_prog();
             }
             ast::Term::Num(num) => {
                 stack.get_mut(frame_idx).unwrap().set_total(0);
@@ -696,8 +703,7 @@ impl ProgramState {
                 .iter_mut()
                 .rev()
                 .find(|x| !x.get_checked())
-                .unwrap()
-                .inc_prog();
+                .map(|x| x.inc_prog());
         }
 
         Ok(())
@@ -736,8 +742,7 @@ impl ProgramState {
                 .iter_mut()
                 .rev()
                 .find(|x| !x.get_checked())
-                .unwrap()
-                .inc_prog();
+                .map(|x| x.inc_prog());
         }
         Ok(())
     }

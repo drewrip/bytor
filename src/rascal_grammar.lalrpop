@@ -92,7 +92,7 @@ pub Func: Arc<Func> = {
     "function" <id:Id> "(" <p:Params> ")" <t:("->" <Type>)?> <w:With?> <b:Stmts> "end" => {
         let ret = match t {
             None => Type::Nil,
-            Some(t) => Type::Int64,
+            Some(t) => t,
         };
         let with = match w {
             None => vec![],

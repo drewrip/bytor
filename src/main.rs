@@ -45,7 +45,7 @@ fn main() {
 #[test]
 fn root_parser_passing1() {
     let source = r#"
-    program
+    program passing1
         let x = 9;
         let y = 10;
     end
@@ -56,9 +56,46 @@ fn root_parser_passing1() {
 #[test]
 fn root_parser_failing1() {
     let source = r#"
-    program
+    program failing1
         1 + 2;
     end
     "#;
     assert!(rascal_grammar::ProgramParser::new().parse(source).is_err());
+}
+
+#[test]
+fn type_checking_passing1() {
+    let source = r#"
+    program passing1
+        let x: int32 = 431;
+    end
+    "#;
+    let root = rascal_grammar::RootParser::new().parse(source).unwrap();
+    let mut state = semantic::new_state(root);
+    // Perform semantic checks and type checking
+    let build_res = state.build();
+    assert!(build_res.is_ok());
+}
+#[test]
+fn type_checking_passing2() {
+    let source = r#"
+    function foo(a: float32, b: float32) -> float32
+        let c = a;
+        c *= b;
+    end
+
+    function baz(x: int32, y: int32, z: int32) -> int32
+        let w = x + y + z;
+    end
+
+    program passing1
+        let x: int32 = 431;
+        let test = baz(x, x, x);
+    end
+    "#;
+    let root = rascal_grammar::RootParser::new().parse(source).unwrap();
+    let mut state = semantic::new_state(root);
+    // Perform semantic checks and type checking
+    let build_res = state.build();
+    assert!(build_res.is_ok());
 }

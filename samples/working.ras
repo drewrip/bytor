@@ -2,13 +2,14 @@ let x = 3 * (4 + 5);
 x = 6 + 5949;
 let some_long = 4 / (5 * (676 - 3) + 2 / 3);
 
-function baz(x: int64, y: int64) -> int64
+function baz(x: int64, y: int64) -> uint64
   let z = 4 * (4 / 5);
 end
 
 program test_program
   let working = foo(2);
   let another_var = flag;
+  let test: int32 = 45;
 end
 
 function foo(n: int32) -> int32
