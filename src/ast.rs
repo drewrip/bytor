@@ -110,6 +110,12 @@ pub enum Expr {
     Sub(Arc<Expr>, Arc<Expr>),
     Mult(Arc<Expr>, Arc<Expr>),
     Div(Arc<Expr>, Arc<Expr>),
+    Eq(Arc<Expr>, Arc<Expr>),
+    Neq(Arc<Expr>, Arc<Expr>),
+    Leq(Arc<Expr>, Arc<Expr>),
+    Geq(Arc<Expr>, Arc<Expr>),
+    LessThan(Arc<Expr>, Arc<Expr>),
+    GreaterThan(Arc<Expr>, Arc<Expr>),
     Call(Symbol, Arc<Args>),
 }
 
@@ -117,6 +123,7 @@ pub enum Expr {
 pub enum Term {
     Id(String),
     Num(i32),
+    Bool(bool),
     Expr(Arc<Expr>),
 }
 
@@ -130,9 +137,18 @@ pub enum AssignOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct IfCase {
+    pub condition: Arc<Expr>,
+    pub block: Block,
+}
+
+pub type IfCases = Vec<Arc<IfCase>>;
+
+#[derive(Debug, Clone)]
 pub enum Stmt {
     Assign(Symbol, Arc<Var>, Arc<Expr>),
     Reassign(Symbol, Arc<Var>, AssignOp, Arc<Expr>),
+    If(IfCases),
     Call(Symbol, Arc<Args>),
     FuncDef(Arc<Func>),
 }

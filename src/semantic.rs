@@ -354,6 +354,7 @@ impl ProgramState {
                                  // Don't increment progress of parent
                 }
             }
+            ast::Stmt::If(if_cases) => {}
             ast::Stmt::Call(symbol, args) => {
                 let func_var = self.slookup(symbol.clone()).unwrap();
                 let func_type = match func_var.type_t.clone() {
@@ -574,6 +575,12 @@ impl ProgramState {
                         .map(|x| x.inc_prog());
                 }
             }
+            ast::Expr::Eq(lhs, rhs) => {}  // TODO: implement checking
+            ast::Expr::Neq(lhs, rhs) => {} // TODO: implement checking
+            ast::Expr::Leq(lhs, rhs) => {} // TODO: implement checking
+            ast::Expr::Geq(lhs, rhs) => {} // TODO: implement checking
+            ast::Expr::LessThan(lhs, rhs) => {} // TODO: implement checking
+            ast::Expr::GreaterThan(lhs, rhs) => {} // TODO: implement checking
             ast::Expr::Call(symbol, args) => {
                 let func_var = self.slookup(symbol.clone()).unwrap();
                 let func_type = match func_var.type_t.clone() {
@@ -639,6 +646,21 @@ impl ProgramState {
                     .get_mut(frame_idx)
                     .unwrap()
                     .set_type(types::Type::Int32);
+                // Increment progress of parent
+                stack
+                    .iter_mut()
+                    .rev()
+                    .find(|x| !x.get_checked())
+                    .unwrap()
+                    .inc_prog();
+            }
+            ast::Term::Bool(bool_value) => {
+                stack.get_mut(frame_idx).unwrap().set_total(0);
+                stack.get_mut(frame_idx).unwrap().set_checked();
+                stack
+                    .get_mut(frame_idx)
+                    .unwrap()
+                    .set_type(types::Type::Bool);
                 // Increment progress of parent
                 stack
                     .iter_mut()
