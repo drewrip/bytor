@@ -80,7 +80,7 @@ impl ProgramState {
         // Now we can 'recursively' check the bodies of the
         // globally defined variables, functions and 'programs'.
         self.check_global_definitions()?;
-        // TODO: check the program
+        // check the program
         self.check_program()?;
         Ok(())
     }
@@ -449,172 +449,16 @@ impl ProgramState {
         let progress = stack.get_mut(frame_idx).unwrap().get_prog();
         match expr {
             ast::Expr::Add(lhs, rhs) => {
-                match progress {
-                    0 => {
-                        stack.get_mut(frame_idx).unwrap().set_total(2);
-                        stack.push(ast::new_frame(
-                            ast::Node::ExprNode(lhs),
-                            types::Type::Unknown,
-                            0,
-                            false,
-                        ));
-                    }
-                    1 => {
-                        stack.push(ast::new_frame(
-                            ast::Node::ExprNode(rhs),
-                            types::Type::Unknown,
-                            0,
-                            false,
-                        ));
-                    }
-                    2 => {
-                        // Both sub expressions checked!
-                        let oper1 = stack.get(frame_idx + 2).unwrap().get_type();
-                        let oper2 = stack.get(frame_idx + 1).unwrap().get_type();
-                        if oper1 != oper2 {
-                            panic!("type error: {:?} == {:?}", oper1, oper2);
-                        }
-                        stack.get_mut(frame_idx).unwrap().set_checked();
-                        stack.get_mut(frame_idx).unwrap().set_type(oper1);
-                        // Increment progress of parent
-                        stack
-                            .iter_mut()
-                            .rev()
-                            .find(|x| !x.get_checked())
-                            .unwrap()
-                            .inc_prog();
-                    }
-                    other => panic!(
-                        "error: progress={} doesn't match any possible for Expr::Add",
-                        other
-                    ),
-                }
+                self.binary_op(stack, frame_idx, progress, "add".into(), lhs, rhs);
             }
             ast::Expr::Sub(lhs, rhs) => {
-                match progress {
-                    0 => {
-                        stack.get_mut(frame_idx).unwrap().set_total(2);
-                        stack.push(ast::new_frame(
-                            ast::Node::ExprNode(lhs),
-                            types::Type::Unknown,
-                            0,
-                            false,
-                        ));
-                    }
-                    1 => {
-                        stack.push(ast::new_frame(
-                            ast::Node::ExprNode(rhs),
-                            types::Type::Unknown,
-                            0,
-                            false,
-                        ));
-                    }
-                    2 => {
-                        // Both sub expressions checked!
-                        let oper1 = stack.get(frame_idx + 2).unwrap().get_type();
-                        let oper2 = stack.get(frame_idx + 1).unwrap().get_type();
-                        if oper1 != oper2 {
-                            panic!("type error: {:?} == {:?}", oper1, oper2);
-                        }
-                        stack.get_mut(frame_idx).unwrap().set_checked();
-                        stack.get_mut(frame_idx).unwrap().set_type(oper1);
-                        // Increment progress of parent
-                        stack
-                            .iter_mut()
-                            .rev()
-                            .find(|x| !x.get_checked())
-                            .unwrap()
-                            .inc_prog();
-                    }
-                    other => panic!(
-                        "error: progress={} doesn't match any possible for Expr::Sub",
-                        other
-                    ),
-                }
+                self.binary_op(stack, frame_idx, progress, "sub".into(), lhs, rhs);
             }
             ast::Expr::Mult(lhs, rhs) => {
-                match progress {
-                    0 => {
-                        stack.get_mut(frame_idx).unwrap().set_total(2);
-                        stack.push(ast::new_frame(
-                            ast::Node::ExprNode(lhs),
-                            types::Type::Unknown,
-                            0,
-                            false,
-                        ));
-                    }
-                    1 => {
-                        stack.push(ast::new_frame(
-                            ast::Node::ExprNode(rhs),
-                            types::Type::Unknown,
-                            0,
-                            false,
-                        ));
-                    }
-                    2 => {
-                        // Both sub expressions checked!
-                        let oper1 = stack.get(frame_idx + 2).unwrap().get_type();
-                        let oper2 = stack.get(frame_idx + 1).unwrap().get_type();
-                        if oper1 != oper2 {
-                            panic!("type error: {:?} == {:?}", oper1, oper2);
-                        }
-                        stack.get_mut(frame_idx).unwrap().set_checked();
-                        stack.get_mut(frame_idx).unwrap().set_type(oper1);
-                        // Increment progress of parent
-                        stack
-                            .iter_mut()
-                            .rev()
-                            .find(|x| !x.get_checked())
-                            .unwrap()
-                            .inc_prog();
-                    }
-                    other => panic!(
-                        "error: progress={} doesn't match any possible for Expr::Mult",
-                        other
-                    ),
-                }
+                self.binary_op(stack, frame_idx, progress, "mult".into(), lhs, rhs);
             }
             ast::Expr::Div(lhs, rhs) => {
-                match progress {
-                    0 => {
-                        stack.get_mut(frame_idx).unwrap().set_total(2);
-                        stack.push(ast::new_frame(
-                            ast::Node::ExprNode(lhs),
-                            types::Type::Unknown,
-                            0,
-                            false,
-                        ));
-                    }
-                    1 => {
-                        stack.push(ast::new_frame(
-                            ast::Node::ExprNode(rhs),
-                            types::Type::Unknown,
-                            0,
-                            false,
-                        ));
-                    }
-                    2 => {
-                        // Both sub expressions checked!
-                        let oper1 = stack.get(frame_idx + 2).unwrap().get_type();
-                        let oper2 = stack.get(frame_idx + 1).unwrap().get_type();
-                        if oper1 != oper2 {
-                            panic!("type error: {:?} == {:?}", oper1, oper2);
-                        }
-                        stack.get_mut(frame_idx).unwrap().set_checked();
-                        stack.get_mut(frame_idx).unwrap().set_type(oper1);
-                        // Increment progress of parent
-                        stack
-                            .iter_mut()
-                            .rev()
-                            .find(|x| !x.get_checked())
-                            .unwrap()
-                            .inc_prog();
-                    }
-                    other => panic!(
-                        "error: progress={} doesn't match any possible for Expr::Div",
-                        other
-                    ),
-                }
+                self.binary_op(stack, frame_idx, progress, "div".into(), lhs, rhs);
             }
             ast::Expr::Term(term) => {
                 match progress {
@@ -633,11 +477,7 @@ impl ProgramState {
                         stack.get_mut(frame_idx).unwrap().set_checked();
                         stack.get_mut(frame_idx).unwrap().set_type(oper1);
                         // Increment progress of parent
-                        stack
-                            .iter_mut()
-                            .rev()
-                            .find(|x| !x.get_checked())
-                            .map(|x| x.inc_prog());
+                        self.inc_parent(stack);
                     }
                     other => panic!(
                         "error: progress={} doesn't match any possible for Expr::Term",
@@ -645,12 +485,24 @@ impl ProgramState {
                     ),
                 }
             }
-            ast::Expr::Eq(lhs, rhs) => {}  // TODO: implement checking
-            ast::Expr::Neq(lhs, rhs) => {} // TODO: implement checking
-            ast::Expr::Leq(lhs, rhs) => {} // TODO: implement checking
-            ast::Expr::Geq(lhs, rhs) => {} // TODO: implement checking
-            ast::Expr::LessThan(lhs, rhs) => {} // TODO: implement checking
-            ast::Expr::GreaterThan(lhs, rhs) => {} // TODO: implement checking
+            ast::Expr::Eq(lhs, rhs) => {
+                self.binary_op(stack, frame_idx, progress, "eq".into(), lhs, rhs);
+            }
+            ast::Expr::Neq(lhs, rhs) => {
+                self.binary_op(stack, frame_idx, progress, "neq".into(), lhs, rhs);
+            }
+            ast::Expr::Leq(lhs, rhs) => {
+                self.binary_op(stack, frame_idx, progress, "leq".into(), lhs, rhs);
+            }
+            ast::Expr::Geq(lhs, rhs) => {
+                self.binary_op(stack, frame_idx, progress, "geq".into(), lhs, rhs);
+            }
+            ast::Expr::LessThan(lhs, rhs) => {
+                self.binary_op(stack, frame_idx, progress, "leq".into(), lhs, rhs);
+            }
+            ast::Expr::GreaterThan(lhs, rhs) => {
+                self.binary_op(stack, frame_idx, progress, "geq".into(), lhs, rhs);
+            }
             ast::Expr::Call(symbol, args) => match progress {
                 0 => {
                     let func_var = self.slookup(symbol.clone()).unwrap();
@@ -699,11 +551,7 @@ impl ProgramState {
                     let return_t = func_type.return_t.first().unwrap().clone();
                     stack.get_mut(frame_idx).unwrap().set_type(return_t);
                     stack.get_mut(frame_idx).unwrap().set_checked();
-                    stack
-                        .iter_mut()
-                        .rev()
-                        .find(|x| !x.get_checked())
-                        .map(|x| x.inc_prog());
+                    self.inc_parent(stack);
                 }
                 other => panic!(
                     "error: progress={} doesn't match any possible for Expr::Call",
@@ -733,12 +581,7 @@ impl ProgramState {
                 stack.get_mut(frame_idx).unwrap().set_checked();
                 stack.get_mut(frame_idx).unwrap().set_type(lookup_type);
                 // Increment progress of parent
-                stack
-                    .iter_mut()
-                    .rev()
-                    .find(|x| !x.get_checked())
-                    .unwrap()
-                    .inc_prog();
+                self.inc_parent(stack);
             }
             ast::Term::Num(num) => {
                 stack.get_mut(frame_idx).unwrap().set_total(0);
@@ -748,12 +591,7 @@ impl ProgramState {
                     .unwrap()
                     .set_type(types::Type::Int32);
                 // Increment progress of parent
-                stack
-                    .iter_mut()
-                    .rev()
-                    .find(|x| !x.get_checked())
-                    .unwrap()
-                    .inc_prog();
+                self.inc_parent(stack);
             }
             ast::Term::Bool(bool_value) => {
                 stack.get_mut(frame_idx).unwrap().set_total(0);
@@ -763,12 +601,7 @@ impl ProgramState {
                     .unwrap()
                     .set_type(types::Type::Bool);
                 // Increment progress of parent
-                stack
-                    .iter_mut()
-                    .rev()
-                    .find(|x| !x.get_checked())
-                    .unwrap()
-                    .inc_prog();
+                self.inc_parent(stack);
             }
             ast::Term::Expr(expr) => {
                 match progress {
@@ -787,12 +620,7 @@ impl ProgramState {
                         stack.get_mut(frame_idx).unwrap().set_checked();
                         stack.get_mut(frame_idx).unwrap().set_type(oper1);
                         // Increment progress of parent
-                        stack
-                            .iter_mut()
-                            .rev()
-                            .find(|x| !x.get_checked())
-                            .unwrap()
-                            .inc_prog();
+                        self.inc_parent(stack);
                     }
                     other => panic!(
                         "error: progress={} doesn't match any possible for Term::Expr",
@@ -829,15 +657,7 @@ impl ProgramState {
                 self.rebase_stack(stack, frame_idx);
                 stack.get_mut(frame_idx).unwrap().set_checked();
                 // Increment progress of parent
-                println!(
-                    "incrementing -> {:?}",
-                    stack.iter_mut().rev().find(|x| !x.get_checked())
-                );
-                stack
-                    .iter_mut()
-                    .rev()
-                    .find(|x| !x.get_checked())
-                    .map(|x| x.inc_prog());
+                self.inc_parent(stack);
             }
             other => panic!(
                 "error: progress={} doesn't match any possible for block",
@@ -877,15 +697,58 @@ impl ProgramState {
                 // Both sub expressions checked!
                 stack.get_mut(frame_idx).unwrap().set_checked();
                 // Increment progress of parent
-                stack
-                    .iter_mut()
-                    .rev()
-                    .find(|x| !x.get_checked())
-                    .map(|x| x.inc_prog());
+                self.inc_parent(stack);
             }
             other => panic!(
                 "error: progress={} doesn't match any possible for func",
                 other
+            ),
+        }
+        Ok(())
+    }
+
+    fn binary_op(
+        &self,
+        stack: &mut Vec<ast::Frame>,
+        frame_idx: usize,
+        progress: usize,
+        operator: String,
+        lhs: Arc<ast::Expr>,
+        rhs: Arc<ast::Expr>,
+    ) -> Result<()> {
+        match progress {
+            0 => {
+                stack.get_mut(frame_idx).unwrap().set_total(2);
+                stack.push(ast::new_frame(
+                    ast::Node::ExprNode(lhs),
+                    types::Type::Unknown,
+                    0,
+                    false,
+                ));
+            }
+            1 => {
+                stack.push(ast::new_frame(
+                    ast::Node::ExprNode(rhs),
+                    types::Type::Unknown,
+                    0,
+                    false,
+                ));
+            }
+            2 => {
+                // Both sub expressions checked!
+                let oper1 = stack.get(frame_idx + 2).unwrap().get_type();
+                let oper2 = stack.get(frame_idx + 1).unwrap().get_type();
+                if oper1 != oper2 {
+                    panic!("type error: {:?} == {:?}", oper1, oper2);
+                }
+                stack.get_mut(frame_idx).unwrap().set_checked();
+                stack.get_mut(frame_idx).unwrap().set_type(oper1);
+                // Increment progress of parent
+                self.inc_parent(stack);
+            }
+            other => panic!(
+                "error: progress={} doesn't match any possible for {}",
+                other, operator
             ),
         }
         Ok(())
@@ -901,5 +764,12 @@ impl ProgramState {
             }
             Some(tail)
         }
+    }
+
+    fn inc_parent(&self, stack: &mut Vec<Frame>) {
+        match stack.iter_mut().rev().find(|x| !x.get_checked()) {
+            Some(parent) => parent.inc_prog(),
+            None => (),
+        };
     }
 }
