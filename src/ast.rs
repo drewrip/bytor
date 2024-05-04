@@ -8,14 +8,14 @@ pub type Block = Vec<Arc<Stmt>>;
 
 #[derive(Debug, Clone)]
 pub struct Frame {
-    pub progress: i32,
-    pub total: i32,
+    pub progress: usize,
+    pub total: usize,
     pub checked: bool,
     pub node: Node,
     pub type_t: types::Type,
 }
 
-pub fn new_frame(node: Node, type_t: types::Type, total: i32, checked: bool) -> Frame {
+pub fn new_frame(node: Node, type_t: types::Type, total: usize, checked: bool) -> Frame {
     Frame {
         progress: 0,
         total,
@@ -26,11 +26,11 @@ pub fn new_frame(node: Node, type_t: types::Type, total: i32, checked: bool) -> 
 }
 
 impl Frame {
-    pub fn get_prog(&self) -> i32 {
+    pub fn get_prog(&self) -> usize {
         self.progress
     }
 
-    pub fn set_prog(&mut self, progress: i32) {
+    pub fn set_prog(&mut self, progress: usize) {
         self.progress = progress;
     }
 
@@ -38,11 +38,11 @@ impl Frame {
         self.progress += 1;
     }
 
-    pub fn get_total(&self) -> i32 {
+    pub fn get_total(&self) -> usize {
         self.total
     }
 
-    pub fn set_total(&mut self, total: i32) {
+    pub fn set_total(&mut self, total: usize) {
         self.total = total;
     }
 
@@ -110,6 +110,12 @@ pub enum Expr {
     Sub(Arc<Expr>, Arc<Expr>),
     Mult(Arc<Expr>, Arc<Expr>),
     Div(Arc<Expr>, Arc<Expr>),
+    Eq(Arc<Expr>, Arc<Expr>),
+    Neq(Arc<Expr>, Arc<Expr>),
+    Leq(Arc<Expr>, Arc<Expr>),
+    Geq(Arc<Expr>, Arc<Expr>),
+    LessThan(Arc<Expr>, Arc<Expr>),
+    GreaterThan(Arc<Expr>, Arc<Expr>),
     Call(Symbol, Arc<Args>),
 }
 
@@ -117,6 +123,7 @@ pub enum Expr {
 pub enum Term {
     Id(String),
     Num(i32),
+    Bool(bool),
     Expr(Arc<Expr>),
 }
 
@@ -130,9 +137,18 @@ pub enum AssignOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct IfCase {
+    pub condition: Arc<Expr>,
+    pub block: Block,
+}
+
+pub type IfCases = Vec<Arc<IfCase>>;
+
+#[derive(Debug, Clone)]
 pub enum Stmt {
     Assign(Symbol, Arc<Var>, Arc<Expr>),
     Reassign(Symbol, Arc<Var>, AssignOp, Arc<Expr>),
+    If(IfCases),
     Call(Symbol, Arc<Args>),
     FuncDef(Arc<Func>),
 }

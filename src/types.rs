@@ -8,6 +8,7 @@ pub enum Type {
     Float64,
     Float32,
     String,
+    Bool,
     // User defined types
     Function(FunctionType),
     Program(ProgramType),

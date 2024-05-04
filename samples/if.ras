@@ -4,4 +4,12 @@ program test_if
     if x == 4 then
         print(x);
     end
+
+    if x == 5 then
+        x = 10;
+    else if x == 6 then
+        x = 11;
+    else then
+        x = 12;
+    end
 end

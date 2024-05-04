@@ -39,6 +39,18 @@ Comma<T>: Vec<T> = {
     }
 };
 
+pub IfCase: Arc<IfCase> = {
+    "if" <e:Expr> "then" <b:Stmts> => Arc::new(IfCase {condition: e, block: b}),
+};
+
+pub ElseIfCase: Arc<IfCase> = {
+    "else" "if" <e:Expr> "then" <b:Stmts> => Arc::new(IfCase {condition: e, block: b}),
+};
+
+pub ElseCase: Arc<IfCase> = {
+    "else" "then" <b:Stmts> => Arc::new(IfCase {condition: Arc::new(Expr::Term(Arc::new(Term::Bool(true)))), block: b}),
+};
+
 pub Stmt: Arc<Stmt> = {
     "let" <i:Id> "=" <e:Expr> ";" => Arc::new(
         Stmt::Assign(
@@ -62,6 +74,13 @@ pub Stmt: Arc<Stmt> = {
           e
         )
     ),
+    <ifcase:IfCase> <elseifcases:ElseIfCase*> <elsecase:ElseCase?> "end" => {
+        let elsecases: Vec<Arc<IfCase>> = match elsecase {
+            Some(elsecasepresent) => vec![elsecasepresent],
+            None => vec![],
+        };
+        Arc::new(Stmt::If(vec![vec![ifcase], elseifcases, elsecases].concat()))
+    },
     <id:Id> "(" <args:Args> ")" ";" => Arc::new(Stmt::Call(Symbol{ident: id}, Arc::new(args))),
     <f:Func> => Arc::new(Stmt::FuncDef(f)),
 };
@@ -112,13 +131,26 @@ pub Expr: Arc<Expr> = {
     #[precedence(level="2")] #[assoc(side="left")]
     <l:Expr> "+" <r:Expr> => Arc::new(Expr::Add(l, r)),
     <l:Expr> "-" <r:Expr> => Arc::new(Expr::Sub(l, r)),
+    #[precedence(level="3")] #[assoc(side="left")]
+    <l:Expr> "==" <r:Expr> => Arc::new(Expr::Eq(l, r)),
+    <l:Expr> "!=" <r:Expr> => Arc::new(Expr::Neq(l, r)),
+    <l:Expr> "<=" <r:Expr> => Arc::new(Expr::Leq(l, r)),
+    <l:Expr> ">=" <r:Expr> => Arc::new(Expr::Geq(l, r)),
+    <l:Expr> "<" <r:Expr> => Arc::new(Expr::LessThan(l, r)),
+    <l:Expr> ">" <r:Expr> => Arc::new(Expr::GreaterThan(l, r)),
 };
 
 pub Term: Arc<Term> = {
     <id:Id> => Arc::new(Term::Id(id)),
     <n:Num> => Arc::new(Term::Num(n)),
+    <b:Bool> => Arc::new(Term::Bool(b)),
     "(" <t:Expr> ")" => Arc::new(Term::Expr(t)),
 };
+
+pub Bool: bool = {
+    "true" => true,
+    "false" => false,
+}
 
 Num: i32 = r"[0-9]+" => i32::from_str(<>).unwrap();
 
@@ -139,5 +171,6 @@ pub Type: Type = {
     "uint32" => Type::UInt32,
     "float64" => Type::Float64,
     "float32" => Type::Float32,
+    "bool" => Type::Bool,
     "Nil" => Type::Nil,
 }

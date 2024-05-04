@@ -74,8 +74,10 @@ fn type_checking_passing1() {
     let mut state = semantic::new_state(root);
     // Perform semantic checks and type checking
     let build_res = state.build();
+
     assert!(build_res.is_ok());
 }
+
 #[test]
 fn type_checking_passing2() {
     let source = r#"
@@ -92,6 +94,70 @@ fn type_checking_passing2() {
         let x: int32 = 431;
         let test = baz(x, x, x);
     end
+    "#;
+    let root = rascal_grammar::RootParser::new().parse(source).unwrap();
+    let mut state = semantic::new_state(root);
+    // Perform semantic checks and type checking
+    let build_res = state.build();
+    assert!(build_res.is_ok());
+}
+
+#[test]
+#[should_panic]
+fn type_checking_func_failing1() {
+    let source = r#"
+    function foo(a: int32, b: float32) -> float32
+        let c = a;
+        let d = b;
+    end
+
+    program passing1
+        let x: int32 = 431;
+        let test = foo(x, x);
+    end
+    "#;
+    let root = rascal_grammar::RootParser::new().parse(source).unwrap();
+    let mut state = semantic::new_state(root);
+    // Perform semantic checks and type checking
+    let build_res = state.build();
+}
+
+#[test]
+fn type_checking_ifs_passing1() {
+    let source = r#"
+        let x: int32 = 4;
+
+        program test_if
+            if x == 5 then
+                x = 10;
+            end
+        end
+    "#;
+    let root = rascal_grammar::RootParser::new().parse(source).unwrap();
+    let mut state = semantic::new_state(root);
+    // Perform semantic checks and type checking
+    let build_res = state.build();
+    assert!(build_res.is_ok());
+}
+
+#[test]
+fn type_checking_ifs_passing2() {
+    let source = r#"
+        let x = 4;
+
+        program test_if
+            if x >= 4 then
+                let y = 2;
+            end
+
+            if x != 5 then
+                x = 10;
+            else if x == 6 then
+                x = 11;
+            else then
+                x = 12;
+            end
+        end
     "#;
     let root = rascal_grammar::RootParser::new().parse(source).unwrap();
     let mut state = semantic::new_state(root);
