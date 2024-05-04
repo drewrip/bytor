@@ -70,7 +70,7 @@ impl ProgramState {
     }
 
     pub fn build(&mut self) -> Result<()> {
-        self.stack.push(new_empty_symbol_table());
+        self.spush();
         // Find the signature of `program` blocks
         //  -> if there are none, we can abort compilation :)
         self.program_signature_discovery()?;
@@ -82,6 +82,7 @@ impl ProgramState {
         self.check_global_definitions()?;
         // check the program
         self.check_program()?;
+        self.spop();
         Ok(())
     }
     fn program_signature_discovery(&mut self) -> Result<()> {
@@ -337,9 +338,37 @@ impl ProgramState {
                     ),
                 }
             }
-            ast::Stmt::If(if_cases) => {}
+            ast::Stmt::If(if_cases) => match progress {
+                0 => {
+                    stack.get_mut(frame_idx).unwrap().set_total(1);
+                    for if_case in if_cases.iter() {
+                        stack.push(ast::new_frame(
+                            ast::Node::BlockNode(if_case.block.clone().into()),
+                            types::Type::Unknown,
+                            0,
+                            false,
+                        ));
+                        stack.push(ast::new_frame(
+                            ast::Node::ExprNode(if_case.condition.clone()),
+                            types::Type::Unknown,
+                            0,
+                            false,
+                        ));
+                    }
+                }
+                1 => {
+                    stack.get_mut(frame_idx).unwrap().set_checked();
+                    self.rebase_stack(stack, frame_idx);
+                    stack.pop();
+                }
+                other => panic!(
+                    "error: progress={} doesn't match any possible for Stmt::If",
+                    other
+                ),
+            },
             ast::Stmt::Call(symbol, args) => match progress {
                 0 => {
+                    stack.get_mut(frame_idx).unwrap().set_total(1);
                     let func_var = self.slookup(symbol.clone()).unwrap();
                     let func_type = match func_var.type_t.clone() {
                         types::Type::Function(func_type) => func_type,
@@ -390,7 +419,7 @@ impl ProgramState {
                     stack.pop();
                 }
                 other => panic!(
-                    "error: progress={} doesn't match any possible for Expr::Call",
+                    "error: progress={} doesn't match any possible for Stmt::Call",
                     other
                 ),
             },
@@ -641,6 +670,8 @@ impl ProgramState {
         let progress = stack.get_mut(frame_idx).unwrap().get_prog();
         match progress {
             0 => {
+                self.rebase_stack(stack, frame_idx);
+                self.spush();
                 stack.get_mut(frame_idx).unwrap().set_total(1);
                 for stmt in block.iter().rev() {
                     stack.push(ast::new_frame(
@@ -656,6 +687,7 @@ impl ProgramState {
                 self.spop();
                 self.rebase_stack(stack, frame_idx);
                 stack.get_mut(frame_idx).unwrap().set_checked();
+                stack.pop();
                 // Increment progress of parent
                 self.inc_parent(stack);
             }
@@ -694,6 +726,7 @@ impl ProgramState {
                 ));
             }
             1 => {
+                self.spop();
                 // Both sub expressions checked!
                 stack.get_mut(frame_idx).unwrap().set_checked();
                 // Increment progress of parent
@@ -739,7 +772,10 @@ impl ProgramState {
                 let oper1 = stack.get(frame_idx + 2).unwrap().get_type();
                 let oper2 = stack.get(frame_idx + 1).unwrap().get_type();
                 if oper1 != oper2 {
-                    panic!("type error: {:?} == {:?}", oper1, oper2);
+                    println!("{:?}", stack);
+                    println!("lhs: {:?}", stack.get(frame_idx + 2).unwrap());
+                    println!("rhs: {:?}", stack.get(frame_idx + 1).unwrap());
+                    panic!("type error: {}({:?}, {:?})", operator, oper1, oper2);
                 }
                 stack.get_mut(frame_idx).unwrap().set_checked();
                 stack.get_mut(frame_idx).unwrap().set_type(oper1);

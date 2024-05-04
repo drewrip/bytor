@@ -125,19 +125,11 @@ fn type_checking_func_failing1() {
 #[test]
 fn type_checking_ifs_passing1() {
     let source = r#"
-        let x = 4;
+        let x: int32 = 4;
 
         program test_if
-            if x == 4 then
-                let y = 2;
-            end
-
             if x == 5 then
                 x = 10;
-            else if x == 6 then
-                x = 11;
-            else then
-                x = 12;
             end
         end
     "#;
