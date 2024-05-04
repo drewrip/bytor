@@ -1,4 +1,6 @@
-#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Type {
     // Primitives
     Int64,
@@ -16,20 +18,20 @@ pub enum Type {
     Unknown,
     Nil,
 }
-#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct FunctionType {
     pub return_t: Vec<Type>,
     pub params_t: Vec<Type>,
     pub with_t: Vec<WithType>,
 }
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub enum WithType {
     Mut,
     Imm,
 }
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ProgramType {
     pub with_t: Vec<WithType>,
 }

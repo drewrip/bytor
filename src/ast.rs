@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use crate::semantic;
@@ -63,7 +64,7 @@ impl Frame {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Node {
     RootNode(Arc<Root>),
     ProgramNode(Arc<Program>),
@@ -82,14 +83,14 @@ pub enum Node {
     VarNode(Arc<Var>),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Root {
     pub preblock: Block,
     pub program: Arc<Program>,
     pub postblock: Block,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Program {
     NoWith(Symbol, Block),
     With(Symbol, With, Block),
@@ -97,13 +98,13 @@ pub enum Program {
 
 pub type With = Vec<Arc<WithVar>>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum WithVar {
     Imm(Symbol),
     Mut(Symbol),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Expr {
     Term(Arc<Term>),
     Add(Arc<Expr>, Arc<Expr>),
@@ -119,7 +120,7 @@ pub enum Expr {
     Call(Symbol, Arc<Args>),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Term {
     Id(String),
     Num(i32),
@@ -127,7 +128,7 @@ pub enum Term {
     Expr(Arc<Expr>),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AssignOp {
     Assign,
     AddAssign,
@@ -136,7 +137,7 @@ pub enum AssignOp {
     DivAssign,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IfCase {
     pub condition: Arc<Expr>,
     pub block: Block,
@@ -144,7 +145,7 @@ pub struct IfCase {
 
 pub type IfCases = Vec<Arc<IfCase>>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Stmt {
     Assign(Symbol, Arc<Var>, Arc<Expr>),
     Reassign(Symbol, Arc<Var>, AssignOp, Arc<Expr>),
@@ -157,13 +158,13 @@ pub type Args = Vec<Arc<Expr>>;
 
 pub type Params = Vec<Arc<Param>>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Param {
     pub type_t: types::Type,
     pub ident: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Func {
     pub ret_t: types::Type,
     pub params: Params,

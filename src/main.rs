@@ -2,6 +2,7 @@ use std::fs;
 
 use clap::Parser;
 use lalrpop_util::lalrpop_mod;
+use serde_json::Result;
 
 pub mod ast;
 pub mod codegen;
@@ -30,14 +31,6 @@ fn main() {
     let mut state = semantic::new_state(root);
     // Perform semantic checks and type checking
     state.build();
-    println!("===================");
-    for frame in state.stack {
-        for (k, v) in frame.table {
-            println!("{:?}: {:?}", k, v);
-        }
-        println!("===================")
-    }
-
     // Generate code
     codegen::gen();
 }

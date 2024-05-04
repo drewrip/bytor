@@ -1,9 +1,10 @@
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use crate::ast;
 use crate::types;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IdentMapping {
     pub symbol: Symbol,
     pub var: Var,
@@ -13,7 +14,7 @@ pub fn new_identmapping(symbol: Symbol, var: Var) -> IdentMapping {
     IdentMapping { symbol, var }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Var {
     pub type_t: types::Type,
     pub node: ast::Node,
@@ -23,7 +24,7 @@ pub fn new_var(type_t: types::Type, node: ast::Node) -> Var {
     Var { type_t, node }
 }
 
-#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub struct Symbol {
     pub ident: String,
 }
