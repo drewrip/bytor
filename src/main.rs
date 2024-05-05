@@ -31,6 +31,10 @@ fn main() {
     let mut state = semantic::new_state(root);
     // Perform semantic checks and type checking
     state.build();
+    println!("build stack:\n");
+    for f in state.build_stack {
+        println!("{:?}", f);
+    }
     // Generate code
     codegen::gen();
 }

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 
-use crate::ast::{self, Frame};
+use crate::ast::{self, new_frame, Frame};
 use crate::symbol::{new_symbol, new_var, IdentMapping, Symbol, Symbolic, Var};
 use crate::types::{self, Type};
 
@@ -11,11 +11,12 @@ type Result<T> = std::result::Result<T, SemanticError>;
 #[derive(Debug, Clone)]
 pub enum SemanticError {
     SomeError,
+    StackCorruption,
 }
 
 impl fmt::Display for SemanticError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Semantic Error")
+        write!(f, "Semantic Error: {:?}", self)
     }
 }
 
@@ -36,10 +37,15 @@ pub type SymbolStack = Vec<SymbolTable>;
 pub struct ProgramState {
     pub stack: SymbolStack,
     pub ast: Arc<ast::Root>,
+    pub build_stack: Vec<Frame>,
 }
 
 pub fn new_state(ast: Arc<ast::Root>) -> ProgramState {
-    ProgramState { stack: vec![], ast }
+    ProgramState {
+        stack: vec![],
+        build_stack: vec![],
+        ast,
+    }
 }
 
 impl ProgramState {
@@ -177,13 +183,20 @@ impl ProgramState {
     }
 
     fn check_program(&mut self) -> Result<()> {
+        let mut stack: Vec<ast::Frame> = vec![];
         let program = self.ast.program.clone();
+        stack.push(new_frame(
+            ast::Node::ProgramNode(program.clone()),
+            Type::Program(types::ProgramType { with_t: vec![] }),
+            0,
+            true,
+        ));
+        self.npop(&mut stack);
         let block = match (*program).clone() {
             ast::Program::NoWith(_, block) => block,
             ast::Program::With(_, _, block) => block,
         };
         let node: ast::Node = ast::Node::BlockNode(block.into());
-        let mut stack: Vec<ast::Frame> = vec![];
         let mut frame: ast::Frame = ast::new_frame(node.clone(), types::Type::Unknown, 0, false);
         let mut idx: usize = 0;
         self.spush();
@@ -272,7 +285,7 @@ impl ProgramState {
                         stack.get_mut(frame_idx).unwrap().set_type(oper1.clone());
                         self.sinsert(symbol, var);
                         self.rebase_stack(stack, frame_idx);
-                        stack.pop();
+                        self.npop(stack);
                     }
                     other => panic!(
                         "error: progress={} doesn't match any possible for Stmt::Assign",
@@ -330,7 +343,7 @@ impl ProgramState {
                         stack.get_mut(frame_idx).unwrap().set_checked();
                         stack.get_mut(frame_idx).unwrap().set_type(oper1);
                         self.rebase_stack(stack, frame_idx);
-                        stack.pop();
+                        self.npop(stack);
                     }
                     other => panic!(
                         "error: progress={} doesn't match any possible for Stmt::Reassign",
@@ -359,7 +372,7 @@ impl ProgramState {
                 1 => {
                     stack.get_mut(frame_idx).unwrap().set_checked();
                     self.rebase_stack(stack, frame_idx);
-                    stack.pop();
+                    self.npop(stack);
                 }
                 other => panic!(
                     "error: progress={} doesn't match any possible for Stmt::If",
@@ -396,7 +409,7 @@ impl ProgramState {
                     let param_types = func_type.params_t;
                     let mut resolved_types: Vec<Type> = vec![];
                     while stack.len() - 1 != frame_idx {
-                        resolved_types.push(stack.pop().unwrap().get_type());
+                        resolved_types.push(self.npop(stack).unwrap().get_type());
                     }
                     for (arg_type, param_type) in resolved_types.iter().rev().zip(param_types) {
                         println!(
@@ -416,7 +429,7 @@ impl ProgramState {
                     stack.get_mut(frame_idx).unwrap().set_type(return_t);
                     stack.get_mut(frame_idx).unwrap().set_checked();
                     self.rebase_stack(stack, frame_idx);
-                    stack.pop();
+                    self.npop(stack);
                 }
                 other => panic!(
                     "error: progress={} doesn't match any possible for Stmt::Call",
@@ -456,7 +469,7 @@ impl ProgramState {
                         stack.get_mut(frame_idx).unwrap().set_checked();
                         stack.get_mut(frame_idx).unwrap().set_type(func_type);
                         self.rebase_stack(stack, frame_idx);
-                        stack.pop();
+                        self.npop(stack);
                     }
                     other => panic!(
                         "error: progress={} doesn't match any possible for Stmt::FuncDef",
@@ -561,7 +574,7 @@ impl ProgramState {
                     let param_types = func_type.params_t;
                     let mut resolved_types: Vec<Type> = vec![];
                     while stack.len() - 1 != frame_idx {
-                        resolved_types.push(stack.pop().unwrap().get_type());
+                        resolved_types.push(self.npop(stack).unwrap().get_type());
                     }
                     for (arg_type, param_type) in resolved_types.iter().rev().zip(param_types) {
                         println!(
@@ -687,7 +700,7 @@ impl ProgramState {
                 self.spop();
                 self.rebase_stack(stack, frame_idx);
                 stack.get_mut(frame_idx).unwrap().set_checked();
-                stack.pop();
+                self.npop(stack);
                 // Increment progress of parent
                 self.inc_parent(stack);
             }
@@ -790,15 +803,26 @@ impl ProgramState {
         Ok(())
     }
 
-    fn rebase_stack(&self, stack: &mut Vec<ast::Frame>, frame_idx: usize) -> Option<Vec<Frame>> {
-        if stack.len() - 1 == frame_idx {
-            None
-        } else {
-            let mut tail = vec![];
-            while stack.len() - 1 != frame_idx {
-                tail.push(stack.pop().unwrap());
+    fn npop(&mut self, stack: &mut Vec<ast::Frame>) -> Result<Frame> {
+        let checked_frame = stack.pop();
+        match checked_frame {
+            Some(frame) => {
+                let build_copy = frame.clone();
+                self.build_stack.push(build_copy);
+                Ok(frame)
             }
-            Some(tail)
+            None => Err(SemanticError::StackCorruption),
+        }
+    }
+
+    fn rebase_stack(&mut self, stack: &mut Vec<ast::Frame>, frame_idx: usize) -> Result<()> {
+        if stack.len() - 1 == frame_idx {
+            Ok(())
+        } else {
+            while stack.len() - 1 != frame_idx {
+                self.npop(stack)?;
+            }
+            Ok(())
         }
     }
 

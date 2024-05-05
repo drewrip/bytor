@@ -1,22 +1,11 @@
 let x = 3 * (4 + 5);
-x = 6 + 5949;
-let some_long = 4 / (5 * (676 - 3) + 2 / 3);
 
-function baz(x: int64, y: int64) -> uint64
+function baz(x: int32, y: int32) -> int32
   let z = 4 * (4 / 5);
+  let y = 3;
 end
 
 program test_program
-  let working = foo(2);
-  let another_var = flag;
-  let test: int32 = 45;
+  let working = baz(2, 3);
+  let test = 66;
 end
-
-function foo(n: int32) -> int32
-  let note = 2 + n;
-  note *= 4;
-end
-
-let test_call = foo(4);
-
-let flag = foo(foo(2));
