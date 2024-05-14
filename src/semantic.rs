@@ -264,7 +264,6 @@ impl ProgramState {
                         let oper1 = stack.get(frame_idx + 3).unwrap().get_type();
                         // Don't increase the parent, because there isn't one right now
                         let var_frame = stack.get(frame_idx + 2).unwrap();
-                        println!("var frame : {:?}", var_frame);
                         let mut var = match var_frame.node.clone() {
                             ast::Node::VarNode(var) => (*var).clone(),
                             _ => panic!("no var!"),

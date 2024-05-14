@@ -1,6 +1,3 @@
-let x = 1233321;
-
 program test_program
-  let y = x;
   let z = 9999;
 end
