@@ -18,8 +18,12 @@ struct Args {
     infile: String,
 
     /// Name of output binary
-    #[arg(short, long, default_value = "bin.wasm")]
+    #[arg(short = 'o', long = "outfile", default_value = "bin.wasm")]
     outfile: String,
+
+    /// Skip the WASM Validation after codegen
+    #[arg(long = "skip-validation", default_value = "false")]
+    skip_validation: bool,
 }
 
 lalrpop_mod!(pub rascal_grammar);
@@ -32,7 +36,7 @@ fn main() {
     let mut state = semantic::new_state(root);
     state.build().unwrap();
     // Generate code
-    let mut gen = codegen::new(state.build_stack, args.outfile);
+    let mut gen = codegen::new(state.build_stack, args.outfile, args.skip_validation);
     gen.gen().unwrap();
 }
 
