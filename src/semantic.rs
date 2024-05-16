@@ -474,6 +474,29 @@ impl ProgramState {
                     ),
                 }
             }
+            ast::Stmt::Return(expr) => {
+                match progress {
+                    0 => {
+                        stack.get_mut(frame_idx).unwrap().set_total(1);
+                        stack.push(ast::new_frame(
+                            ast::Node::ExprNode(expr),
+                            types::Type::Unknown,
+                            0,
+                            false,
+                        ));
+                    }
+                    1 => {
+                        // Nothing to check just yet
+                        stack.get_mut(frame_idx).unwrap().set_checked();
+                        self.rebase_stack(stack, frame_idx);
+                        self.npop(stack);
+                    }
+                    other => panic!(
+                        "error: progress={} doesn't match any possible for Stmt::Return",
+                        other
+                    ),
+                }
+            }
         }
 
         Ok(())
@@ -764,7 +787,7 @@ impl ProgramState {
             0 => {
                 stack.get_mut(frame_idx).unwrap().set_total(2);
                 stack.push(ast::new_frame(
-                    ast::Node::ExprNode(lhs),
+                    ast::Node::ExprNode(rhs),
                     types::Type::Unknown,
                     0,
                     false,
@@ -772,7 +795,7 @@ impl ProgramState {
             }
             1 => {
                 stack.push(ast::new_frame(
-                    ast::Node::ExprNode(rhs),
+                    ast::Node::ExprNode(lhs),
                     types::Type::Unknown,
                     0,
                     false,
@@ -780,12 +803,12 @@ impl ProgramState {
             }
             2 => {
                 // Both sub expressions checked!
-                let oper1 = stack.get(frame_idx + 2).unwrap().get_type();
-                let oper2 = stack.get(frame_idx + 1).unwrap().get_type();
+                let oper1 = stack.get(frame_idx + 1).unwrap().get_type();
+                let oper2 = stack.get(frame_idx + 2).unwrap().get_type();
                 if oper1 != oper2 {
                     println!("{:?}", stack);
-                    println!("lhs: {:?}", stack.get(frame_idx + 2).unwrap());
-                    println!("rhs: {:?}", stack.get(frame_idx + 1).unwrap());
+                    println!("lhs: {:?}", stack.get(frame_idx + 1).unwrap());
+                    println!("rhs: {:?}", stack.get(frame_idx + 2).unwrap());
                     panic!("type error: {}({:?}, {:?})", operator, oper1, oper2);
                 }
                 stack.get_mut(frame_idx).unwrap().set_checked();

@@ -83,6 +83,7 @@ pub Stmt: Arc<Stmt> = {
     },
     <id:Id> "(" <args:Args> ")" ";" => Arc::new(Stmt::Call(Symbol{ident: id}, Arc::new(args))),
     <f:Func> => Arc::new(Stmt::FuncDef(f)),
+    "return" <e:Expr> ";" => Arc::new(Stmt::Return(e)),
 };
 
 pub Program: Arc<Program> = {

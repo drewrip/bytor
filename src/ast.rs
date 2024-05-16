@@ -166,6 +166,7 @@ pub enum Stmt {
     If(IfCases),
     Call(Symbol, Arc<Args>),
     FuncDef(Arc<Func>),
+    Return(Arc<Expr>),
 }
 
 pub type Args = Vec<Arc<Expr>>;

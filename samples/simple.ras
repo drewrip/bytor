@@ -1,3 +1,5 @@
 program test_program
-  let z = 4 / 2;
+  let x = 10;
+  x *= 2;
+  return x;
 end
