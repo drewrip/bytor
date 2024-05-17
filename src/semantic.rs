@@ -295,28 +295,58 @@ impl ProgramState {
                     0 => {
                         stack.get_mut(frame_idx).unwrap().set_total(1);
                         stack.push(ast::new_frame(
-                            ast::Node::SymbolNode(symbol),
+                            ast::Node::SymbolNode(symbol.clone()),
                             types::Type::Unknown,
                             0,
                             true,
                         ));
                         stack.push(ast::new_frame(
-                            ast::Node::VarNode(var),
+                            ast::Node::VarNode(var.clone()),
                             types::Type::Unknown,
                             0,
                             true,
                         ));
                         stack.push(ast::new_frame(
-                            ast::Node::AssignOpNode(assign_op),
+                            ast::Node::AssignOpNode(assign_op.clone()),
                             types::Type::Unknown,
                             0,
                             true,
                         ));
+                        let assign_op_expr = match assign_op {
+                            ast::AssignOp::Assign => expr,
+                            ast::AssignOp::AddAssign => Arc::new(ast::Expr::Add(
+                                Arc::new(ast::Expr::Term(Arc::new(ast::Term::Id(
+                                    symbol.ident.clone(),
+                                )))),
+                                expr,
+                            )),
+                            ast::AssignOp::SubAssign => Arc::new(ast::Expr::Sub(
+                                Arc::new(ast::Expr::Term(Arc::new(ast::Term::Id(
+                                    symbol.ident.clone(),
+                                )))),
+                                expr,
+                            )),
+                            ast::AssignOp::MultAssign => Arc::new(ast::Expr::Mult(
+                                Arc::new(ast::Expr::Term(Arc::new(ast::Term::Id(
+                                    symbol.ident.clone(),
+                                )))),
+                                expr,
+                            )),
+                            ast::AssignOp::DivAssign => Arc::new(ast::Expr::Div(
+                                Arc::new(ast::Expr::Term(Arc::new(ast::Term::Id(
+                                    symbol.ident.clone(),
+                                )))),
+                                expr,
+                            )),
+                        };
                         stack.push(ast::new_frame(
-                            ast::Node::ExprNode(expr),
+                            ast::Node::ExprNode(assign_op_expr.clone()),
                             types::Type::Unknown,
                             0,
                             false,
+                        ));
+                        stack.get_mut(frame_idx).unwrap().node = ast::Node::StmtNode(Arc::new(
+                            ast::Stmt::Assign(symbol, var, assign_op_expr),
                         ));
                     }
                     1 => {

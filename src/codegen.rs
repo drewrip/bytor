@@ -228,24 +228,7 @@ impl CodeGen {
                 ));
             }
             ast::Stmt::Reassign(symbol, var, assign_op, expr) => {
-                let op = match assign_op {
-                    ast::AssignOp::Assign => Instruction::Nop,
-                    ast::AssignOp::AddAssign => Instruction::I32Add,
-                    ast::AssignOp::SubAssign => Instruction::I32Sub,
-                    ast::AssignOp::MultAssign => Instruction::I32Mul,
-                    ast::AssignOp::DivAssign => Instruction::I32DivS,
-                };
-                if !matches_variant!(op, Instruction::Nop) {
-                    func.instruction(&Instruction::LocalGet(
-                        self.symbol_assignments
-                            .lookup_assignment(symbol.clone())
-                            .unwrap(),
-                    ));
-                    func.instruction(&op);
-                }
-                func.instruction(&Instruction::LocalSet(
-                    self.symbol_assignments.lookup_assignment(symbol).unwrap(),
-                ));
+                panic!("A Reassign statement should never be on the build_stack!");
             }
             _ => {
                 eprintln!("gen stmt not implemented: {:?}", stmt);

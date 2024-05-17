@@ -1,5 +1,5 @@
 program test_program
   let x = 10;
-  x *= 2;
+  x -= 2;
   return x;
 end
