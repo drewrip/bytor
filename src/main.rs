@@ -18,8 +18,12 @@ struct Args {
     infile: String,
 
     /// Name of output binary
-    #[arg(short, long, default_value = "a.out")]
+    #[arg(short = 'o', long = "outfile", default_value = "bin.wasm")]
     outfile: String,
+
+    /// Skip the WASM Validation after codegen
+    #[arg(long = "skip-validation", default_value = "false")]
+    skip_validation: bool,
 }
 
 lalrpop_mod!(pub rascal_grammar);
@@ -28,15 +32,12 @@ fn main() {
     let args = Args::parse();
     let src_file = fs::read_to_string(args.infile).expect("ERROR: couldn't find source file");
     let root = rascal_grammar::RootParser::new().parse(&src_file).unwrap();
-    let mut state = semantic::new_state(root);
     // Perform semantic checks and type checking
-    state.build();
-    println!("build stack:\n");
-    for f in state.build_stack {
-        println!("{:?}", f);
-    }
+    let mut state = semantic::new_state(root);
+    state.build().unwrap();
     // Generate code
-    codegen::gen();
+    let mut gen = codegen::new(state.build_stack, args.outfile, args.skip_validation);
+    gen.gen().unwrap();
 }
 
 #[test]

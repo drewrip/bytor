@@ -14,6 +14,7 @@ pub struct Frame {
     pub checked: bool,
     pub node: Node,
     pub type_t: types::Type,
+    pub symbols: Option<semantic::SymbolTable>,
 }
 
 pub fn new_frame(node: Node, type_t: types::Type, total: usize, checked: bool) -> Frame {
@@ -23,6 +24,7 @@ pub fn new_frame(node: Node, type_t: types::Type, total: usize, checked: bool) -
         checked,
         node,
         type_t,
+        symbols: None,
     }
 }
 
@@ -62,8 +64,20 @@ impl Frame {
     pub fn get_checked(&self) -> bool {
         self.checked
     }
+
+    pub fn add_symbols(&mut self, symbol_table: Option<semantic::SymbolTable>) {
+        self.symbols = symbol_table;
+    }
 }
 
+pub fn requires_block(node: Node) -> bool {
+    match node {
+        Node::ProgramNode(_) => true,
+        Node::FuncNode(_) => true,
+        // TODO: if statements can have blocks,
+        _ => false,
+    }
+}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Node {
     RootNode(Arc<Root>),
@@ -152,6 +166,7 @@ pub enum Stmt {
     If(IfCases),
     Call(Symbol, Arc<Args>),
     FuncDef(Arc<Func>),
+    Return(Arc<Expr>),
 }
 
 pub type Args = Vec<Arc<Expr>>;

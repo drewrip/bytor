@@ -70,9 +70,8 @@ impl ProgramState {
         Ok(())
     }
 
-    pub fn spop(&mut self) -> Result<()> {
-        self.stack.pop();
-        Ok(())
+    pub fn spop(&mut self) -> Option<SymbolTable> {
+        self.stack.pop()
     }
 
     pub fn build(&mut self) -> Result<()> {
@@ -189,13 +188,13 @@ impl ProgramState {
             ast::Node::ProgramNode(program.clone()),
             Type::Program(types::ProgramType { with_t: vec![] }),
             0,
-            true,
+            false,
         ));
-        self.npop(&mut stack);
         let block = match (*program).clone() {
             ast::Program::NoWith(_, block) => block,
             ast::Program::With(_, _, block) => block,
         };
+        self.npop(&mut stack);
         let node: ast::Node = ast::Node::BlockNode(block.into());
         let mut frame: ast::Frame = ast::new_frame(node.clone(), types::Type::Unknown, 0, false);
         let mut idx: usize = 0;
@@ -224,7 +223,6 @@ impl ProgramState {
                 }
             };
         }
-
         Ok(())
     }
 
@@ -264,7 +262,6 @@ impl ProgramState {
                         let oper1 = stack.get(frame_idx + 3).unwrap().get_type();
                         // Don't increase the parent, because there isn't one right now
                         let var_frame = stack.get(frame_idx + 2).unwrap();
-                        println!("var frame : {:?}", var_frame);
                         let mut var = match var_frame.node.clone() {
                             ast::Node::VarNode(var) => (*var).clone(),
                             _ => panic!("no var!"),
@@ -298,28 +295,58 @@ impl ProgramState {
                     0 => {
                         stack.get_mut(frame_idx).unwrap().set_total(1);
                         stack.push(ast::new_frame(
-                            ast::Node::SymbolNode(symbol),
+                            ast::Node::SymbolNode(symbol.clone()),
                             types::Type::Unknown,
                             0,
                             true,
                         ));
                         stack.push(ast::new_frame(
-                            ast::Node::VarNode(var),
+                            ast::Node::VarNode(var.clone()),
                             types::Type::Unknown,
                             0,
                             true,
                         ));
                         stack.push(ast::new_frame(
-                            ast::Node::AssignOpNode(assign_op),
+                            ast::Node::AssignOpNode(assign_op.clone()),
                             types::Type::Unknown,
                             0,
                             true,
                         ));
+                        let assign_op_expr = match assign_op {
+                            ast::AssignOp::Assign => expr,
+                            ast::AssignOp::AddAssign => Arc::new(ast::Expr::Add(
+                                Arc::new(ast::Expr::Term(Arc::new(ast::Term::Id(
+                                    symbol.ident.clone(),
+                                )))),
+                                expr,
+                            )),
+                            ast::AssignOp::SubAssign => Arc::new(ast::Expr::Sub(
+                                Arc::new(ast::Expr::Term(Arc::new(ast::Term::Id(
+                                    symbol.ident.clone(),
+                                )))),
+                                expr,
+                            )),
+                            ast::AssignOp::MultAssign => Arc::new(ast::Expr::Mult(
+                                Arc::new(ast::Expr::Term(Arc::new(ast::Term::Id(
+                                    symbol.ident.clone(),
+                                )))),
+                                expr,
+                            )),
+                            ast::AssignOp::DivAssign => Arc::new(ast::Expr::Div(
+                                Arc::new(ast::Expr::Term(Arc::new(ast::Term::Id(
+                                    symbol.ident.clone(),
+                                )))),
+                                expr,
+                            )),
+                        };
                         stack.push(ast::new_frame(
-                            ast::Node::ExprNode(expr),
+                            ast::Node::ExprNode(assign_op_expr.clone()),
                             types::Type::Unknown,
                             0,
                             false,
+                        ));
+                        stack.get_mut(frame_idx).unwrap().node = ast::Node::StmtNode(Arc::new(
+                            ast::Stmt::Assign(symbol, var, assign_op_expr),
                         ));
                     }
                     1 => {
@@ -473,6 +500,29 @@ impl ProgramState {
                     }
                     other => panic!(
                         "error: progress={} doesn't match any possible for Stmt::FuncDef",
+                        other
+                    ),
+                }
+            }
+            ast::Stmt::Return(expr) => {
+                match progress {
+                    0 => {
+                        stack.get_mut(frame_idx).unwrap().set_total(1);
+                        stack.push(ast::new_frame(
+                            ast::Node::ExprNode(expr),
+                            types::Type::Unknown,
+                            0,
+                            false,
+                        ));
+                    }
+                    1 => {
+                        // Nothing to check just yet
+                        stack.get_mut(frame_idx).unwrap().set_checked();
+                        self.rebase_stack(stack, frame_idx);
+                        self.npop(stack);
+                    }
+                    other => panic!(
+                        "error: progress={} doesn't match any possible for Stmt::Return",
                         other
                     ),
                 }
@@ -697,9 +747,10 @@ impl ProgramState {
                 stack.get_mut(frame_idx).unwrap().inc_prog();
             }
             1 => {
-                self.spop();
                 self.rebase_stack(stack, frame_idx);
                 stack.get_mut(frame_idx).unwrap().set_checked();
+                let found_symbols = self.spop().unwrap().clone();
+                attach_symbols_parent(&mut self.build_stack, found_symbols);
                 self.npop(stack);
                 // Increment progress of parent
                 self.inc_parent(stack);
@@ -739,9 +790,9 @@ impl ProgramState {
                 ));
             }
             1 => {
-                self.spop();
                 // Both sub expressions checked!
                 stack.get_mut(frame_idx).unwrap().set_checked();
+                stack.get_mut(frame_idx).unwrap().add_symbols(self.spop());
                 // Increment progress of parent
                 self.inc_parent(stack);
             }
@@ -766,7 +817,7 @@ impl ProgramState {
             0 => {
                 stack.get_mut(frame_idx).unwrap().set_total(2);
                 stack.push(ast::new_frame(
-                    ast::Node::ExprNode(lhs),
+                    ast::Node::ExprNode(rhs),
                     types::Type::Unknown,
                     0,
                     false,
@@ -774,7 +825,7 @@ impl ProgramState {
             }
             1 => {
                 stack.push(ast::new_frame(
-                    ast::Node::ExprNode(rhs),
+                    ast::Node::ExprNode(lhs),
                     types::Type::Unknown,
                     0,
                     false,
@@ -782,12 +833,12 @@ impl ProgramState {
             }
             2 => {
                 // Both sub expressions checked!
-                let oper1 = stack.get(frame_idx + 2).unwrap().get_type();
-                let oper2 = stack.get(frame_idx + 1).unwrap().get_type();
+                let oper1 = stack.get(frame_idx + 1).unwrap().get_type();
+                let oper2 = stack.get(frame_idx + 2).unwrap().get_type();
                 if oper1 != oper2 {
                     println!("{:?}", stack);
-                    println!("lhs: {:?}", stack.get(frame_idx + 2).unwrap());
-                    println!("rhs: {:?}", stack.get(frame_idx + 1).unwrap());
+                    println!("lhs: {:?}", stack.get(frame_idx + 1).unwrap());
+                    println!("rhs: {:?}", stack.get(frame_idx + 2).unwrap());
                     panic!("type error: {}({:?}, {:?})", operator, oper1, oper2);
                 }
                 stack.get_mut(frame_idx).unwrap().set_checked();
@@ -832,4 +883,15 @@ impl ProgramState {
             None => (),
         };
     }
+}
+
+fn attach_symbols_parent(stack: &mut Vec<Frame>, symbols: SymbolTable) {
+    match stack
+        .iter_mut()
+        .rev()
+        .find(|x| !x.get_checked() && ast::requires_block(x.node.clone()))
+    {
+        Some(parent) => parent.add_symbols(Some(symbols)),
+        None => panic!("no parent node to attach symbols to"),
+    };
 }
