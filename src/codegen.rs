@@ -99,7 +99,6 @@ impl CodeGen {
         let main_results = vec![ValType::I32]; // Return code
         types.function(main_params, main_results);
         module.section(&types);
-
         // Encode the function section.
         let mut functions = FunctionSection::new();
         let type_index = 0;
@@ -213,6 +212,24 @@ impl CodeGen {
             ast::Expr::Div(lhs, rhs) => {
                 func.instruction(&Instruction::I32DivS); // operands currently out of order
             }
+            ast::Expr::Eq(lhs, rhs) => {
+                func.instruction(&Instruction::I32Eq);
+            }
+            ast::Expr::Neq(lhs, rhs) => {
+                func.instruction(&Instruction::I32Ne);
+            }
+            ast::Expr::Leq(lhs, rhs) => {
+                func.instruction(&Instruction::I32LeS);
+            }
+            ast::Expr::Geq(lhs, rhs) => {
+                func.instruction(&Instruction::I32GeS);
+            }
+            ast::Expr::LessThan(lhs, rhs) => {
+                func.instruction(&Instruction::I32LtS);
+            }
+            ast::Expr::GreaterThan(lhs, rhs) => {
+                func.instruction(&Instruction::I32GtS);
+            }
             ast::Expr::Term(term) => {} // Skip
             _ => {
                 eprintln!("gen expr not implemented: {:?}", expr);
@@ -230,6 +247,10 @@ impl CodeGen {
             ast::Stmt::Reassign(symbol, var, assign_op, expr) => {
                 panic!("A Reassign statement should never be on the build_stack!");
             }
+            ast::Stmt::Return(expr) => {
+                func.instruction(&Instruction::Return);
+            }
+
             _ => {
                 eprintln!("gen stmt not implemented: {:?}", stmt);
             }
