@@ -6,6 +6,7 @@ use serde_json::Result;
 
 pub mod ast;
 pub mod codegen;
+pub mod ir;
 pub mod semantic;
 pub mod symbol;
 pub mod types;

@@ -1,5 +1,5 @@
-use crate::ast::Frame;
 use crate::ast::{self, Program};
+use crate::ir::IRNode;
 use crate::semantic;
 use crate::symbol::{new_symbol, Symbol};
 use anyhow::Result;
@@ -64,13 +64,13 @@ impl SymbolAssignments {
 }
 
 pub struct CodeGen {
-    build_stack: Vec<ast::Frame>,
+    build_stack: Vec<IRNode>,
     outfile: String,
     skip_validation: bool,
     symbol_assignments: SymbolAssignments,
 }
 
-pub fn new(build_stack: Vec<ast::Frame>, outfile: String, skip_validation: bool) -> CodeGen {
+pub fn new(build_stack: Vec<IRNode>, outfile: String, skip_validation: bool) -> CodeGen {
     CodeGen {
         build_stack: build_stack.into_iter().rev().collect(),
         outfile,
@@ -127,7 +127,7 @@ impl CodeGen {
     }
 
     pub fn gen_globals(&mut self, module: &mut Module) {
-        let mut next_frame: &Frame = self.build_stack.last().unwrap();
+        let mut next_frame: &IRNode = self.build_stack.last().unwrap();
         while !matches_variant!(next_frame.node, ast::Node::ProgramNode) {
             // Do something with the node in the global scope
             self.build_stack.pop();
@@ -139,7 +139,7 @@ impl CodeGen {
         let mut codes = CodeSection::new();
         let mut locals = vec![];
 
-        let mut frame: Frame = self.build_stack.pop().unwrap();
+        let mut frame: IRNode = self.build_stack.pop().unwrap();
         match frame.node {
             ast::Node::ProgramNode(_) => {
                 self.symbol_assignments.spush();
