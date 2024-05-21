@@ -128,7 +128,7 @@ impl CodeGen {
 
     pub fn gen_globals(&mut self, module: &mut Module) {
         let mut next_frame: &IRNode = self.build_stack.last().unwrap();
-        while !matches_variant!(next_frame.node, ast::Node::ProgramNode) {
+        while !matches_variant!(next_frame.ast_node, ast::Node::ProgramNode) {
             // Do something with the node in the global scope
             self.build_stack.pop();
             next_frame = self.build_stack.last().unwrap();
@@ -140,7 +140,7 @@ impl CodeGen {
         let mut locals = vec![];
 
         let mut frame: IRNode = self.build_stack.pop().unwrap();
-        match frame.node {
+        match frame.ast_node {
             ast::Node::ProgramNode(_) => {
                 self.symbol_assignments.spush();
                 for symbol in frame.symbols.unwrap().table.into_keys() {
@@ -158,7 +158,7 @@ impl CodeGen {
         );
         while !self.build_stack.is_empty() {
             frame = self.build_stack.pop().unwrap();
-            match frame.node {
+            match frame.ast_node {
                 ast::Node::TermNode(term) => {
                     self.gen_term(module, &mut main_func, (*term).clone());
                 }
