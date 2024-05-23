@@ -17,20 +17,32 @@ pub struct Label(String);
 
 #[derive(Debug, Clone)]
 pub struct Assign {
-    type_t: Type,
-    symbol: Symbol,
+    pub type_t: Type,
+    pub symbol: Symbol,
 }
 
 #[derive(Debug, Clone)]
 pub struct IfCase {
-    end_block_label: Label,
-    end_if_label: Label,
+    pub end_block_label: Label,
+    pub end_if_label: Label,
 }
 
 #[derive(Debug, Clone)]
 pub struct Term {
-    type_t: Type,
-    value: usize, // TODO: will need a generic value
+    pub type_t: Type,
+    pub value: Value,
+}
+
+#[derive(Debug, Clone)]
+pub enum Value {
+    Int32(i32),
+    Int64(i64),
+    UInt32(u32),
+    UInt64(u64),
+    Float32(f32),
+    Float64(f64),
+    Bool(bool),
+    Id(String),
 }
 
 #[derive(Debug, Clone)]

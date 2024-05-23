@@ -3,7 +3,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use crate::ast::{AssignOp, Block, Expr, Func, Node, Program, Root, Stmt, Term};
-use crate::ir::IRNode;
+use crate::ir::{self, IRNode};
 use crate::symbol::{new_symbol, new_var, IdentMapping, Symbol, Symbolic, Var};
 use crate::types::{self, Type};
 
@@ -266,7 +266,6 @@ impl ProgramState {
             Program::NoWith(_, block) => block,
             Program::With(_, _, block) => block,
         };
-        stack.pop();
         let node: Node = Node::BlockNode(block.into());
         let mut sem_node: SemNode = new_sem_node(
             node.clone(),
@@ -288,13 +287,17 @@ impl ProgramState {
 
             idx = new_idx;
             sem_node = new_sem_node.clone();
-
+            println!("{:?}", sem_node.ast_node.clone());
             match sem_node.ast_node.clone() {
                 Node::StmtNode(stmt) => self.check_stmt(&mut stack, idx, (*stmt).clone()),
                 Node::ExprNode(expr) => self.check_expr(&mut stack, idx, (*expr).clone()),
                 Node::TermNode(term) => self.check_term(&mut stack, idx, (*term).clone()),
                 Node::BlockNode(block) => self.check_block(&mut stack, idx, (*block).clone()),
                 Node::FuncNode(func) => self.check_func(&mut stack, idx, (*func).clone()),
+                Node::ProgramNode(prog) => {
+                    stack.pop();
+                    Ok(())
+                }
                 _ => {
                     println!("node -> {:?}", sem_node.ast_node.clone());
                     panic!("AST node not yet implemented!")
@@ -358,6 +361,7 @@ impl ProgramState {
                         stack.get_mut(node_idx).unwrap().set_type(oper1.clone());
                         self.sinsert(symbol, var);
                         self.rebase_stack(stack, node_idx);
+                        self.inc_parent(stack, node_idx);
                         stack.pop();
                     }
                     other => panic!(
@@ -441,6 +445,7 @@ impl ProgramState {
                         stack.get_mut(node_idx).unwrap().set_checked();
                         stack.get_mut(node_idx).unwrap().set_type(oper1);
                         self.rebase_stack(stack, node_idx);
+                        self.inc_parent(stack, node_idx);
                         stack.pop();
                     }
                     other => panic!(
@@ -449,9 +454,10 @@ impl ProgramState {
                     ),
                 }
             }
-            Stmt::If(if_cases) => match progress {
-                0 => {
-                    stack.get_mut(node_idx).unwrap().set_total(1);
+            Stmt::If(if_cases) => {
+                let total_nodes = if_cases.len() * 2; // A case + block for each
+                if progress == 0 {
+                    stack.get_mut(node_idx).unwrap().set_total(total_nodes);
                     for if_case in if_cases.iter() {
                         stack.push(new_sem_node(
                             Node::BlockNode(if_case.block.clone().into()),
@@ -468,20 +474,22 @@ impl ProgramState {
                             Some(node_idx),
                         ));
                     }
-                }
-                1 => {
+                } else if progress == total_nodes {
                     stack.get_mut(node_idx).unwrap().set_checked();
                     self.rebase_stack(stack, node_idx);
+                    self.inc_parent(stack, node_idx);
                     stack.pop();
+                } else {
+                    panic!(
+                        "error: progress={} doesn't match any possible for Stmt::If",
+                        progress
+                    );
                 }
-                other => panic!(
-                    "error: progress={} doesn't match any possible for Stmt::If",
-                    other
-                ),
-            },
-            Stmt::Call(symbol, args) => match progress {
-                0 => {
-                    stack.get_mut(node_idx).unwrap().set_total(1);
+            }
+            Stmt::Call(symbol, args) => {
+                let num_args = args.len();
+                if progress == 0 {
+                    stack.get_mut(node_idx).unwrap().set_total(num_args);
                     let func_var = self.slookup(symbol.clone()).unwrap();
                     let func_type = match func_var.type_t.clone() {
                         types::Type::Function(func_type) => func_type,
@@ -500,8 +508,7 @@ impl ProgramState {
                             Some(node_idx),
                         ));
                     }
-                }
-                1 => {
+                } else if progress == num_args {
                     let func_var = self.slookup(symbol.clone()).unwrap();
                     let func_type = match func_var.type_t.clone() {
                         types::Type::Function(func_type) => func_type,
@@ -530,13 +537,15 @@ impl ProgramState {
                     stack.get_mut(node_idx).unwrap().set_type(return_t);
                     stack.get_mut(node_idx).unwrap().set_checked();
                     self.rebase_stack(stack, node_idx);
+                    self.inc_parent(stack, node_idx);
                     stack.pop();
+                } else {
+                    panic!(
+                        "error: progress={} doesn't match any possible for Stmt::Call",
+                        progress
+                    )
                 }
-                other => panic!(
-                    "error: progress={} doesn't match any possible for Stmt::Call",
-                    other
-                ),
-            },
+            }
             Stmt::FuncDef(func) => {
                 match progress {
                     0 => {
@@ -571,6 +580,7 @@ impl ProgramState {
                         stack.get_mut(node_idx).unwrap().set_checked();
                         stack.get_mut(node_idx).unwrap().set_type(func_type);
                         self.rebase_stack(stack, node_idx);
+                        self.inc_parent(stack, node_idx);
                         stack.pop();
                     }
                     other => panic!(
@@ -595,6 +605,7 @@ impl ProgramState {
                         // Nothing to check just yet
                         stack.get_mut(node_idx).unwrap().set_checked();
                         self.rebase_stack(stack, node_idx);
+                        self.inc_parent(stack, node_idx);
                         stack.pop();
                     }
                     other => panic!(
@@ -667,8 +678,9 @@ impl ProgramState {
             Expr::GreaterThan(lhs, rhs) => {
                 self.binary_op(stack, node_idx, progress, "geq".into(), lhs, rhs);
             }
-            Expr::Call(symbol, args) => match progress {
-                0 => {
+            Expr::Call(symbol, args) => {
+                let num_args = args.len();
+                if progress == 0 {
                     let func_var = self.slookup(symbol.clone()).unwrap();
                     let func_type = match func_var.type_t.clone() {
                         types::Type::Function(func_type) => func_type,
@@ -684,11 +696,10 @@ impl ProgramState {
                             types::Type::Unknown,
                             0,
                             false,
-                            None,
+                            Some(node_idx),
                         ));
                     }
-                }
-                1 => {
+                } else if progress == num_args {
                     let func_var = self.slookup(symbol.clone()).unwrap();
                     let func_type = match func_var.type_t.clone() {
                         types::Type::Function(func_type) => func_type,
@@ -717,12 +728,13 @@ impl ProgramState {
                     stack.get_mut(node_idx).unwrap().set_type(return_t);
                     stack.get_mut(node_idx).unwrap().set_checked();
                     self.inc_parent(stack, node_idx);
+                } else {
+                    panic!(
+                        "error: progress={} doesn't match any possible for Expr::Call",
+                        progress
+                    );
                 }
-                other => panic!(
-                    "error: progress={} doesn't match any possible for Expr::Call",
-                    other
-                ),
-            },
+            }
         }
         Ok(())
     }
@@ -739,9 +751,16 @@ impl ProgramState {
                 };
 
                 stack.get_mut(node_idx).unwrap().set_checked();
-                stack.get_mut(node_idx).unwrap().set_type(lookup_type);
+                stack
+                    .get_mut(node_idx)
+                    .unwrap()
+                    .set_type(lookup_type.clone());
                 // Increment progress of parent
                 self.inc_parent(stack, node_idx);
+                self.build_stack.push(IRNode::Term(ir::Term {
+                    type_t: lookup_type,
+                    value: ir::Value::Id(ident),
+                }));
             }
             Term::Num(num) => {
                 stack.get_mut(node_idx).unwrap().set_total(0);
@@ -752,6 +771,10 @@ impl ProgramState {
                     .set_type(types::Type::Int32);
                 // Increment progress of parent
                 self.inc_parent(stack, node_idx);
+                self.build_stack.push(IRNode::Term(ir::Term {
+                    type_t: types::Type::Int32,
+                    value: ir::Value::Int32(num),
+                }));
             }
             Term::Bool(bool_value) => {
                 stack.get_mut(node_idx).unwrap().set_total(0);
@@ -759,6 +782,10 @@ impl ProgramState {
                 stack.get_mut(node_idx).unwrap().set_type(types::Type::Bool);
                 // Increment progress of parent
                 self.inc_parent(stack, node_idx);
+                self.build_stack.push(IRNode::Term(ir::Term {
+                    type_t: types::Type::Bool,
+                    value: ir::Value::Bool(bool_value),
+                }));
             }
             Term::Expr(expr) => {
                 match progress {
@@ -797,35 +824,33 @@ impl ProgramState {
         block: Block,
     ) -> Result<()> {
         let progress = stack.get_mut(node_idx).unwrap().get_prog();
-        match progress {
-            0 => {
-                self.rebase_stack(stack, node_idx);
-                self.spush();
-                stack.get_mut(node_idx).unwrap().set_total(1);
-                for stmt in block.iter().rev() {
-                    stack.push(new_sem_node(
-                        Node::StmtNode(stmt.clone()),
-                        types::Type::Unknown,
-                        0,
-                        false,
-                        None, // TODO: might want to make the parent the block node
-                    ));
-                }
-                stack.get_mut(node_idx).unwrap().inc_prog();
+        let num_stmts = block.len();
+        if progress == 0 {
+            self.rebase_stack(stack, node_idx);
+            self.spush();
+            stack.get_mut(node_idx).unwrap().set_total(num_stmts);
+            for stmt in block.iter().rev() {
+                stack.push(new_sem_node(
+                    Node::StmtNode(stmt.clone()),
+                    types::Type::Unknown,
+                    0,
+                    false,
+                    Some(node_idx),
+                ));
             }
-            1 => {
-                self.rebase_stack(stack, node_idx);
-                stack.get_mut(node_idx).unwrap().set_checked();
-                let found_symbols = self.spop().unwrap().clone();
-                attach_symbols_parent(stack, node_idx, found_symbols);
-                stack.pop();
-                // Increment progress of parent
-                self.inc_parent(stack, node_idx);
-            }
-            other => panic!(
+        } else if progress == num_stmts {
+            self.rebase_stack(stack, node_idx);
+            stack.get_mut(node_idx).unwrap().set_checked();
+            let found_symbols = self.spop().unwrap().clone();
+            attach_symbols_parent(stack, node_idx, found_symbols);
+            // Increment progress of parent
+            self.inc_parent(stack, node_idx);
+            stack.pop();
+        } else {
+            panic!(
                 "error: progress={} doesn't match any possible for block",
-                other
-            ),
+                progress
+            );
         }
         Ok(())
     }

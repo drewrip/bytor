@@ -36,6 +36,9 @@ fn main() {
     // Perform semantic checks and type checking
     let mut state = semantic::new_state(root);
     state.build().unwrap();
+    for (n, ir_node) in state.build_stack.iter().enumerate() {
+        println!("({}) {:?}", n, ir_node);
+    }
     // Generate code
     // let mut gen = codegen::new(state.build_stack, args.outfile, args.skip_validation);
     // gen.gen().unwrap();
