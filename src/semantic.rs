@@ -111,6 +111,7 @@ pub struct ProgramState {
     pub stack: SymbolStack,
     pub ast: Arc<Root>,
     pub build_stack: Vec<IRNode>,
+    pub label_map: HashMap<String, usize>,
 }
 
 pub fn new_state(ast: Arc<Root>) -> ProgramState {
@@ -118,6 +119,7 @@ pub fn new_state(ast: Arc<Root>) -> ProgramState {
         stack: vec![],
         build_stack: vec![],
         ast,
+        label_map: HashMap::new(),
     }
 }
 
@@ -204,6 +206,7 @@ impl ProgramState {
     }
 
     fn check_global_definitions(&mut self) -> Result<()> {
+        self.ins_label_index("_globals_start".into());
         let base_node = self.stack.first_mut().expect("No base node!");
         // All of the global statements
         let stmts: Vec<Arc<Stmt>> = self
@@ -248,7 +251,7 @@ impl ProgramState {
                 };
             }
         }
-
+        self.ins_label_index("_globals_end".into());
         Ok(())
     }
 
@@ -359,9 +362,13 @@ impl ProgramState {
                         };
                         stack.get_mut(node_idx).unwrap().set_checked();
                         stack.get_mut(node_idx).unwrap().set_type(oper1.clone());
-                        self.sinsert(symbol, var);
+                        self.sinsert(symbol.clone(), var);
                         self.rebase_stack(stack, node_idx);
                         self.inc_parent(stack, node_idx);
+                        self.build_stack.push(IRNode::Assign(ir::Assign {
+                            type_t: oper1.clone(),
+                            symbol: symbol.clone(),
+                        }));
                         stack.pop();
                     }
                     other => panic!(
@@ -434,7 +441,7 @@ impl ProgramState {
                                 panic!("stack node isn't symbol: {:?}\nstack: {:?}", other, stack)
                             }
                         };
-                        let lookup_type = match self.slookup(symbol) {
+                        let lookup_type = match self.slookup(symbol.clone()) {
                             Some(var) => var.type_t.clone(),
                             None => panic!("ident not found!"),
                         };
@@ -443,9 +450,13 @@ impl ProgramState {
                             panic!("type error: {:?} == {:?}", oper1, lookup_type);
                         }
                         stack.get_mut(node_idx).unwrap().set_checked();
-                        stack.get_mut(node_idx).unwrap().set_type(oper1);
+                        stack.get_mut(node_idx).unwrap().set_type(oper1.clone());
                         self.rebase_stack(stack, node_idx);
                         self.inc_parent(stack, node_idx);
+                        self.build_stack.push(IRNode::Reassign(ir::Reassign {
+                            type_t: oper1.clone(),
+                            symbol: symbol.clone(),
+                        }));
                         stack.pop();
                     }
                     other => panic!(
@@ -606,6 +617,8 @@ impl ProgramState {
                         stack.get_mut(node_idx).unwrap().set_checked();
                         self.rebase_stack(stack, node_idx);
                         self.inc_parent(stack, node_idx);
+                        self.build_stack
+                            .push(IRNode::Return(ir::Label("program".to_string())));
                         stack.pop();
                     }
                     other => panic!(
@@ -623,16 +636,16 @@ impl ProgramState {
         let progress = stack.get_mut(node_idx).unwrap().get_prog();
         match expr {
             Expr::Add(lhs, rhs) => {
-                self.binary_op(stack, node_idx, progress, "add".into(), lhs, rhs);
+                self.binary_op(stack, node_idx, progress, ir::Func::Add, lhs, rhs);
             }
             Expr::Sub(lhs, rhs) => {
-                self.binary_op(stack, node_idx, progress, "sub".into(), lhs, rhs);
+                self.binary_op(stack, node_idx, progress, ir::Func::Sub, lhs, rhs);
             }
             Expr::Mult(lhs, rhs) => {
-                self.binary_op(stack, node_idx, progress, "mult".into(), lhs, rhs);
+                self.binary_op(stack, node_idx, progress, ir::Func::Mult, lhs, rhs);
             }
             Expr::Div(lhs, rhs) => {
-                self.binary_op(stack, node_idx, progress, "div".into(), lhs, rhs);
+                self.binary_op(stack, node_idx, progress, ir::Func::Div, lhs, rhs);
             }
             Expr::Term(term) => {
                 match progress {
@@ -661,22 +674,22 @@ impl ProgramState {
                 }
             }
             Expr::Eq(lhs, rhs) => {
-                self.binary_op(stack, node_idx, progress, "eq".into(), lhs, rhs);
+                self.binary_op(stack, node_idx, progress, ir::Func::Eq, lhs, rhs);
             }
             Expr::Neq(lhs, rhs) => {
-                self.binary_op(stack, node_idx, progress, "neq".into(), lhs, rhs);
+                self.binary_op(stack, node_idx, progress, ir::Func::Neq, lhs, rhs);
             }
             Expr::Leq(lhs, rhs) => {
-                self.binary_op(stack, node_idx, progress, "leq".into(), lhs, rhs);
+                self.binary_op(stack, node_idx, progress, ir::Func::Leq, lhs, rhs);
             }
             Expr::Geq(lhs, rhs) => {
-                self.binary_op(stack, node_idx, progress, "geq".into(), lhs, rhs);
+                self.binary_op(stack, node_idx, progress, ir::Func::Geq, lhs, rhs);
             }
             Expr::LessThan(lhs, rhs) => {
-                self.binary_op(stack, node_idx, progress, "leq".into(), lhs, rhs);
+                self.binary_op(stack, node_idx, progress, ir::Func::Lt, lhs, rhs);
             }
             Expr::GreaterThan(lhs, rhs) => {
-                self.binary_op(stack, node_idx, progress, "geq".into(), lhs, rhs);
+                self.binary_op(stack, node_idx, progress, ir::Func::Gt, lhs, rhs);
             }
             Expr::Call(symbol, args) => {
                 let num_args = args.len();
@@ -699,6 +712,8 @@ impl ProgramState {
                             Some(node_idx),
                         ));
                     }
+                    self.build_stack
+                        .push(IRNode::Eval(ir::Func::DefFunc(symbol)));
                 } else if progress == num_args {
                     let func_var = self.slookup(symbol.clone()).unwrap();
                     let func_type = match func_var.type_t.clone() {
@@ -893,11 +908,11 @@ impl ProgramState {
     }
 
     fn binary_op(
-        &self,
+        &mut self,
         stack: &mut Vec<SemNode>,
         node_idx: usize,
         progress: usize,
-        operator: String,
+        operator: ir::Func,
         lhs: Arc<Expr>,
         rhs: Arc<Expr>,
     ) -> Result<()> {
@@ -929,15 +944,16 @@ impl ProgramState {
                     println!("{:?}", stack);
                     println!("lhs: {:?}", stack.get(node_idx + 1).unwrap());
                     println!("rhs: {:?}", stack.get(node_idx + 2).unwrap());
-                    panic!("type error: {}({:?}, {:?})", operator, oper1, oper2);
+                    panic!("type error: {:?}({:?}, {:?})", operator, oper1, oper2);
                 }
                 stack.get_mut(node_idx).unwrap().set_checked();
                 stack.get_mut(node_idx).unwrap().set_type(oper1);
                 // Increment progress of parent
                 self.inc_parent(stack, node_idx);
+                self.build_stack.push(IRNode::Eval(operator));
             }
             other => panic!(
-                "error: progress={} doesn't match any possible for {}",
+                "error: progress={} doesn't match any possible for {:?}",
                 other, operator
             ),
         }
@@ -960,6 +976,17 @@ impl ProgramState {
             Some(parent) => stack.get_mut(parent).unwrap().inc_prog(),
             None => (),
         };
+    }
+
+    fn ins_label(&mut self, label: String) {
+        self.build_stack.push(IRNode::Label(ir::Label(label)));
+    }
+
+    fn ins_label_index(&mut self, label: String) {
+        let mapped_index = self.build_stack.len();
+        self.build_stack
+            .push(IRNode::Label(ir::Label(label.clone())));
+        self.label_map.insert(label, mapped_index);
     }
 }
 

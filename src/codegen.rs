@@ -84,13 +84,6 @@ pub fn new(build_stack: Vec<IRNode>, outfile: String, skip_validation: bool) -> 
 
 impl CodeGen {
     pub fn gen(&mut self) -> Result<(), CodeGenError> {
-        println!("============================");
-        println!("START OF CODEGEN");
-        println!("============================");
-        for (i, node) in self.build_stack.iter().rev().enumerate() {
-            println!("    ({}) : {:?}", i + 1, node);
-        }
-
         let mut module = Module::new();
 
         // Encode the type section.
@@ -99,6 +92,7 @@ impl CodeGen {
         let main_results = vec![ValType::I32]; // Return code
         types.function(main_params, main_results);
         module.section(&types);
+
         // Encode the function section.
         let mut functions = FunctionSection::new();
         let type_index = 0;
@@ -127,11 +121,11 @@ impl CodeGen {
     }
 
     pub fn gen_globals(&mut self, module: &mut Module) {
-        let mut next_frame: &IRNode = self.build_stack.last().unwrap();
-        while !matches_variant!(next_frame.ast_node, ast::Node::ProgramNode) {
+        let mut next_ir_node: &IRNode = self.build_stack.last().unwrap();
+        while !matches_variant!(next_ir_node.ast_node, ast::Node::ProgramNode) {
             // Do something with the node in the global scope
             self.build_stack.pop();
-            next_frame = self.build_stack.last().unwrap();
+            next_ir_node = self.build_stack.last().unwrap();
         }
     }
 
@@ -139,11 +133,11 @@ impl CodeGen {
         let mut codes = CodeSection::new();
         let mut locals = vec![];
 
-        let mut frame: IRNode = self.build_stack.pop().unwrap();
-        match frame.ast_node {
+        let mut ir_node: IRNode = self.build_stack.pop().unwrap();
+        match ir_node.ast_node {
             ast::Node::ProgramNode(_) => {
                 self.symbol_assignments.spush();
-                for symbol in frame.symbols.unwrap().table.into_keys() {
+                for symbol in ir_node.symbols.unwrap().table.into_keys() {
                     let assignment = self.symbol_assignments.give_assignment(symbol);
                     locals.push((assignment, ValType::I32));
                 }
@@ -157,8 +151,8 @@ impl CodeGen {
             locals.iter().map(|local| local.1).collect::<Vec<ValType>>(),
         );
         while !self.build_stack.is_empty() {
-            frame = self.build_stack.pop().unwrap();
-            match frame.ast_node {
+            ir_node = self.build_stack.pop().unwrap();
+            match ir_node.ast_node {
                 ast::Node::TermNode(term) => {
                     self.gen_term(module, &mut main_func, (*term).clone());
                 }
@@ -169,7 +163,7 @@ impl CodeGen {
                     self.gen_stmt(module, &mut main_func, (*stmt).clone());
                 }
                 node => {
-                    eprintln!("Frame type not implemented for codegen: {:?}", node);
+                    eprintln!("ir_node type not implemented for codegen: {:?}", node);
                 }
             };
         }

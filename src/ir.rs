@@ -7,16 +7,24 @@ use crate::types::Type;
 pub enum IRNode {
     Label(Label),
     Assign(Assign),
+    Reassign(Reassign),
     IfCase(IfCase),
     Term(Term),
     Eval(Func),
+    Return(Label),
 }
 
 #[derive(Debug, Clone)]
-pub struct Label(String);
+pub struct Label(pub String);
 
 #[derive(Debug, Clone)]
 pub struct Assign {
+    pub type_t: Type,
+    pub symbol: Symbol,
+}
+
+#[derive(Debug, Clone)]
+pub struct Reassign {
     pub type_t: Type,
     pub symbol: Symbol,
 }
@@ -57,4 +65,5 @@ pub enum Func {
     Geq,
     Eq,
     Neq,
+    DefFunc(Symbol),
 }
