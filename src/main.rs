@@ -5,7 +5,8 @@ use lalrpop_util::lalrpop_mod;
 use serde_json::Result;
 
 pub mod ast;
-pub mod codegen;
+//pub mod codegen;
+pub mod ir;
 pub mod semantic;
 pub mod symbol;
 pub mod types;
@@ -35,9 +36,17 @@ fn main() {
     // Perform semantic checks and type checking
     let mut state = semantic::new_state(root);
     state.build().unwrap();
+    println!("Label Map:");
+    for (n, (label, idx)) in state.label_map.iter().enumerate() {
+        println!("({})\t{} -> {}", n, label, idx);
+    }
+    println!("Build Stack:");
+    for (n, ir_node) in state.build_stack.iter().enumerate() {
+        println!("({})\t{:?}", n, ir_node);
+    }
     // Generate code
-    let mut gen = codegen::new(state.build_stack, args.outfile, args.skip_validation);
-    gen.gen().unwrap();
+    //let mut gen = codegen::new(state.build_stack, args.outfile, args.skip_validation);
+    //gen.gen().unwrap();
 }
 
 #[test]

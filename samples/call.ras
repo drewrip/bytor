@@ -1,0 +1,8 @@
+function baz(x: int32, y: int32, z: int32) -> int32
+    let w = x + y + z;
+end
+
+program passing1
+    let x: int32 = 431;
+    let test = baz(x, x, x);
+end

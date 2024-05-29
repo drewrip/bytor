@@ -2,12 +2,11 @@ program test_program
 
   let x = 10;
 
-  if x > 5 then
-    x = 20;
-  else if x > 3 then
-    x = 15;
-  else then
-    x = 1;
+  x = x - 2;
+  x *= 3;
+
+  if x > 2 then
+    x = 22;
   end
 
   return x;
