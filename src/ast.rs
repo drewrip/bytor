@@ -24,6 +24,7 @@ pub enum Node {
     TermNode(Arc<Term>),
     SymbolNode(Symbol),
     VarNode(Arc<Var>),
+    Null,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

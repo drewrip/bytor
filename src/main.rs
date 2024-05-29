@@ -36,6 +36,11 @@ fn main() {
     // Perform semantic checks and type checking
     let mut state = semantic::new_state(root);
     state.build().unwrap();
+    println!("Label Map:");
+    for (n, (label, idx)) in state.label_map.iter().enumerate() {
+        println!("({})\t{} -> {}", n, label, idx);
+    }
+    println!("Build Stack:");
     for (n, ir_node) in state.build_stack.iter().enumerate() {
         println!("({})\t{:?}", n, ir_node);
     }

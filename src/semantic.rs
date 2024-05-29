@@ -21,6 +21,13 @@ impl fmt::Display for SemanticError {
     }
 }
 
+// Helpful annotations to keep around the semantic checking stack
+#[derive(Debug, Clone)]
+pub enum AnnotationNode {
+    Label(String),
+    IfCase(String, String),
+}
+
 pub fn new_sem_node(
     ast_node: Node,
     type_t: types::Type,
@@ -36,6 +43,20 @@ pub fn new_sem_node(
         type_t,
         symbols: None,
         parent,
+        annotation: None,
+    }
+}
+
+pub fn new_annotation(annotation: Option<AnnotationNode>) -> SemNode {
+    SemNode {
+        progress: 0,
+        total: 1,
+        checked: false,
+        ast_node: Node::Null,
+        type_t: types::Type::Nil,
+        symbols: None,
+        parent: None,
+        annotation,
     }
 }
 
@@ -48,7 +69,8 @@ pub struct SemNode {
     pub type_t: types::Type,
     pub symbols: Option<SymbolTable>,
     pub parent: Option<usize>, // Optionally the node_idx of the parent AST node
-                               // NOTE: we also now need a way to reference the location of a function or jump target
+    // NOTE: we also now need a way to reference the location of a function or jump target
+    pub annotation: Option<AnnotationNode>,
 }
 
 impl SemNode {
@@ -112,6 +134,7 @@ pub struct ProgramState {
     pub ast: Arc<Root>,
     pub build_stack: Vec<IRNode>,
     pub label_map: HashMap<String, usize>,
+    pub scope_counter: usize,
 }
 
 pub fn new_state(ast: Arc<Root>) -> ProgramState {
@@ -120,6 +143,7 @@ pub fn new_state(ast: Arc<Root>) -> ProgramState {
         build_stack: vec![],
         ast,
         label_map: HashMap::new(),
+        scope_counter: 0,
     }
 }
 
@@ -147,6 +171,12 @@ impl ProgramState {
 
     pub fn spop(&mut self) -> Option<SymbolTable> {
         self.stack.pop()
+    }
+
+    pub fn get_new_scope(&mut self) -> usize {
+        let new_scope = self.scope_counter;
+        self.scope_counter += 1;
+        new_scope
     }
 
     pub fn build(&mut self) -> Result<()> {
@@ -297,6 +327,9 @@ impl ProgramState {
                 Node::TermNode(term) => self.check_term(&mut stack, idx, (*term).clone()),
                 Node::BlockNode(block) => self.check_block(&mut stack, idx, (*block).clone()),
                 Node::FuncNode(func) => self.check_func(&mut stack, idx, (*func).clone()),
+                Node::Null => {
+                    self.check_annotation(&mut stack, idx, sem_node.annotation.unwrap().clone())
+                }
                 Node::ProgramNode(prog) => {
                     stack.pop();
                     Ok(())
@@ -469,7 +502,17 @@ impl ProgramState {
                 let total_nodes = if_cases.len() * 2; // A case + block for each
                 if progress == 0 {
                     stack.get_mut(node_idx).unwrap().set_total(total_nodes);
-                    for if_case in if_cases.iter() {
+                    let end_if_label = self.get_new_scope();
+                    stack.push(new_annotation(Some(AnnotationNode::Label(format!(
+                        "_end_if_block_{}",
+                        end_if_label
+                    )))));
+                    for if_case in if_cases.iter().rev() {
+                        let end_block_label = self.get_new_scope();
+                        stack.push(new_annotation(Some(AnnotationNode::Label(format!(
+                            "_end_case_block_{}",
+                            end_block_label
+                        )))));
                         stack.push(new_sem_node(
                             Node::BlockNode(if_case.block.clone().into()),
                             types::Type::Unknown,
@@ -477,6 +520,10 @@ impl ProgramState {
                             false,
                             Some(node_idx),
                         ));
+                        stack.push(new_annotation(Some(AnnotationNode::IfCase(
+                            format!("_end_case_block_{}", end_block_label),
+                            format!("_end_if_block_{}", end_if_label),
+                        ))));
                         stack.push(new_sem_node(
                             Node::ExprNode(if_case.condition.clone()),
                             types::Type::Unknown,
@@ -957,6 +1004,29 @@ impl ProgramState {
                 other, operator
             ),
         }
+        Ok(())
+    }
+
+    fn check_annotation(
+        &mut self,
+        stack: &mut Vec<SemNode>,
+        node_idx: usize,
+        annotation: AnnotationNode,
+    ) -> Result<()> {
+        stack.get_mut(node_idx).unwrap().inc_prog();
+        stack.get_mut(node_idx).unwrap().set_checked();
+        match annotation {
+            AnnotationNode::Label(label) => {
+                self.ins_label_index(label);
+            }
+            AnnotationNode::IfCase(end_block_label, end_if_label) => {
+                self.build_stack.push(IRNode::IfCase(ir::IfCase {
+                    end_block_label: ir::Label(end_block_label),
+                    end_if_label: ir::Label(end_if_label),
+                }));
+            }
+        }
+        stack.pop();
         Ok(())
     }
 
