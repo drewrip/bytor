@@ -3,7 +3,7 @@ use crate::semantic;
 use crate::symbol::Symbol;
 use crate::types::Type;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum IRNode {
     Label(Label),
     Assign(Assign),
@@ -14,34 +14,34 @@ pub enum IRNode {
     Return(Label),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Label(pub String);
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Assign {
     pub type_t: Type,
     pub symbol: Symbol,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Reassign {
     pub type_t: Type,
     pub symbol: Symbol,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct IfCase {
     pub end_block_label: Label,
     pub end_if_label: Label,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Term {
     pub type_t: Type,
     pub value: Value,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     Int32(i32),
     Int64(i64),
@@ -53,7 +53,7 @@ pub enum Value {
     Id(String),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Func {
     Add,
     Sub,

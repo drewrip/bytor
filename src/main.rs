@@ -1,15 +1,18 @@
 use std::fs;
 
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use lalrpop_util::lalrpop_mod;
-use serde_json::Result;
 
 pub mod ast;
-//pub mod codegen;
+pub mod backends;
+pub mod codegen;
 pub mod ir;
 pub mod semantic;
 pub mod symbol;
 pub mod types;
+
+use backends::{c::CGenContext, wasm::WasmGenContext};
+use codegen::CodeGen;
 
 /// Compiler for the Rascal language
 #[derive(Parser, Debug)]
@@ -19,12 +22,22 @@ struct Args {
     infile: String,
 
     /// Name of output binary
-    #[arg(short = 'o', long = "outfile", default_value = "bin.wasm")]
+    #[arg(short = 'o', long = "outfile", default_value = "a.out")]
     outfile: String,
 
     /// Skip the WASM Validation after codegen
     #[arg(long = "skip-validation", default_value = "false")]
     skip_validation: bool,
+
+    /// Backend: options will be C, or WASM
+    #[arg(short = 'b', long = "backend", value_enum, default_value_t = BackendArgs::C)]
+    backend: BackendArgs,
+}
+
+#[derive(Clone, Debug, ValueEnum)]
+enum BackendArgs {
+    C,
+    WASM,
 }
 
 lalrpop_mod!(pub rascal_grammar);
@@ -45,8 +58,12 @@ fn main() {
         println!("({})\t{:?}", n, ir_node);
     }
     // Generate code
-    //let mut gen = codegen::new(state.build_stack, args.outfile, args.skip_validation);
-    //gen.gen().unwrap();
+    let ctx = codegen::new(state.build_stack, args.outfile, args.skip_validation);
+    let build_result = match args.backend {
+        BackendArgs::C => CGenContext::from(ctx).gen(),
+        BackendArgs::WASM => WasmGenContext::from(ctx).gen(),
+    };
+    build_result.expect("Build failed!");
 }
 
 #[test]

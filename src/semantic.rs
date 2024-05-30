@@ -193,6 +193,7 @@ impl ProgramState {
         // check the program
         self.check_program()?;
         self.spop();
+
         Ok(())
     }
     fn program_signature_discovery(&mut self) -> Result<()> {
@@ -320,7 +321,6 @@ impl ProgramState {
 
             idx = new_idx;
             sem_node = new_sem_node.clone();
-            println!("{:?}", sem_node.ast_node.clone());
             match sem_node.ast_node.clone() {
                 Node::StmtNode(stmt) => self.check_stmt(&mut stack, idx, (*stmt).clone()),
                 Node::ExprNode(expr) => self.check_expr(&mut stack, idx, (*expr).clone()),
@@ -461,8 +461,9 @@ impl ProgramState {
                             false,
                             Some(node_idx),
                         ));
-                        stack.get_mut(node_idx).unwrap().ast_node =
-                            Node::StmtNode(Arc::new(Stmt::Assign(symbol, var, assign_op_expr)));
+                        stack.get_mut(node_idx).unwrap().ast_node = Node::StmtNode(Arc::new(
+                            Stmt::Reassign(symbol, var, assign_op, assign_op_expr),
+                        ));
                     }
                     1 => {
                         // Both sub expressions checked!
