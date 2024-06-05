@@ -30,6 +30,34 @@ pub fn translate_type(type_t: Type) -> String {
     .into()
 }
 
+pub fn translate_value(value: ir::Value) -> String {
+    match value {
+        ir::Value::Int32(num) => format!("INT32_C({})", num),
+        ir::Value::Int64(num) => format!("INT64_C({})", num),
+        ir::Value::UInt32(num) => format!("UINT32_C({})", num),
+        ir::Value::UInt64(num) => format!("UINT64_C({})", num),
+        ir::Value::Float32(num) => format!("{}F", num),
+        ir::Value::Float64(num) => format!("{}", num),
+        ir::Value::Bool(b) => {
+            if b {
+                format!("1")
+            } else {
+                format!("0")
+            }
+        }
+        ir::Value::Id(ident) => format!("{}", ident),
+        other => panic!("No value translation for: {:?}", other),
+    }
+}
+
+pub fn is_expr_node(node: IRNode) -> bool {
+    match node {
+        IRNode::Term(_) => true,
+        IRNode::Eval(_) => true,
+        _ => false,
+    }
+}
+
 pub struct CGenContext {
     build_stack: Vec<IRNode>,
     outfile: String,
@@ -149,15 +177,82 @@ impl CGenContext {
         println!("{:?}", assign);
         self.add_code(&translate_type(assign.type_t));
         self.add_code(&assign.symbol.ident.clone());
-        self.add_code(" = 1;");
+        self.add_code("=");
+        self.gen_expr(idx + 1);
+        self.add_code(";");
         Ok(idx - 1)
     }
 
     fn gen_reassign(&mut self, idx: usize, reassign: ir::Reassign) -> Result<usize, CodeGenError> {
         println!("{:?}", reassign);
         self.add_code(&*reassign.symbol.ident.clone());
-        self.add_code(" = 1;");
+        self.add_code("=");
+        self.gen_expr(idx + 1);
+        self.add_code(";");
         Ok(idx - 1)
+    }
+
+    fn gen_expr(&mut self, idx: usize) -> Result<(), CodeGenError> {
+        // Collect
+        let mut expr: Vec<IRNode> = self
+            .build_stack
+            .iter()
+            .skip(idx)
+            .take_while(|node| is_expr_node((*node).clone()))
+            .cloned()
+            .collect();
+
+        // Use a stack to build the expression
+        let mut stack: Vec<String> = vec![];
+        for node in expr.into_iter().rev() {
+            match node {
+                IRNode::Term(term) => stack.push(translate_value(term.value)),
+                IRNode::Eval(eval) => {
+                    let mut sub_expr: Vec<String> = vec!["(".into()];
+                    let evaluated = match eval {
+                        ir::Func::Add => {
+                            format!("{} + {}", stack.pop().unwrap(), stack.pop().unwrap())
+                        }
+                        ir::Func::Sub => {
+                            format!("{} - {}", stack.pop().unwrap(), stack.pop().unwrap())
+                        }
+                        ir::Func::Mult => {
+                            format!("{} * {}", stack.pop().unwrap(), stack.pop().unwrap())
+                        }
+                        ir::Func::Div => {
+                            format!("{} / {}", stack.pop().unwrap(), stack.pop().unwrap())
+                        }
+                        ir::Func::Lt => {
+                            format!("{} < {}", stack.pop().unwrap(), stack.pop().unwrap())
+                        }
+                        ir::Func::Gt => {
+                            format!("{} > {}", stack.pop().unwrap(), stack.pop().unwrap())
+                        }
+                        ir::Func::Leq => {
+                            format!("{} <= {}", stack.pop().unwrap(), stack.pop().unwrap())
+                        }
+                        ir::Func::Geq => {
+                            format!("{} >= {}", stack.pop().unwrap(), stack.pop().unwrap())
+                        }
+                        ir::Func::Eq => {
+                            format!("{} == {}", stack.pop().unwrap(), stack.pop().unwrap())
+                        }
+                        ir::Func::Neq => {
+                            format!("{} != {}", stack.pop().unwrap(), stack.pop().unwrap())
+                        }
+                        ir::Func::DefFunc(_) => {
+                            panic!("User defined function calls not handled yet!")
+                        }
+                    };
+                    sub_expr.push(evaluated);
+                    sub_expr.push(")".into());
+                    stack.push(sub_expr.join(" "))
+                }
+                _ => panic!("This shouldn't ever happen!"),
+            };
+        }
+        self.add_code(&stack.pop().unwrap());
+        Ok(())
     }
 
     fn gen_return(&mut self, idx: usize) -> Result<usize, CodeGenError> {
