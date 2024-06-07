@@ -6,6 +6,8 @@ use std::fs::File;
 use std::io::Write;
 use std::process::Command;
 
+use std::collections::HashMap;
+
 macro_rules! matches_variant {
     ($val:expr, $var:path) => {
         match $val {
@@ -63,6 +65,7 @@ pub struct CGenContext {
     outfile: String,
     skip_validation: bool,
     code_buffer: Vec<String>,
+    label_scope_counter: HashMap<String, usize>,
 }
 
 impl From<CodeGenContext> for CGenContext {
@@ -72,6 +75,7 @@ impl From<CodeGenContext> for CGenContext {
             outfile: ctx.outfile,
             skip_validation: ctx.skip_validation,
             code_buffer: vec![],
+            label_scope_counter: HashMap::new(),
         }
     }
 }
@@ -174,7 +178,6 @@ impl CGenContext {
     }
 
     fn gen_assign(&mut self, idx: usize, assign: ir::Assign) -> Result<usize, CodeGenError> {
-        println!("{:?}", assign);
         self.add_code(&translate_type(assign.type_t));
         self.add_code(&assign.symbol.ident.clone());
         self.add_code("=");
@@ -184,7 +187,6 @@ impl CGenContext {
     }
 
     fn gen_reassign(&mut self, idx: usize, reassign: ir::Reassign) -> Result<usize, CodeGenError> {
-        println!("{:?}", reassign);
         self.add_code(&*reassign.symbol.ident.clone());
         self.add_code("=");
         self.gen_expr(idx + 1);

@@ -25,7 +25,11 @@ impl fmt::Display for SemanticError {
 #[derive(Debug, Clone)]
 pub enum AnnotationNode {
     Label(String),
-    IfCase(String, String),
+    If(String),
+    IfCase(String),
+    ElseIfCase(String),
+    ElseCase(String),
+    EndIf(String),
 }
 
 pub fn new_sem_node(
@@ -500,20 +504,18 @@ impl ProgramState {
                 }
             }
             Stmt::If(if_cases) => {
-                let total_nodes = if_cases.len() * 2; // A case + block for each
+                let mut total_nodes = if_cases.len() * 2; // A case + block for each
+                if if_cases.last().unwrap().is_else {
+                    total_nodes -= 1;
+                }
                 if progress == 0 {
                     stack.get_mut(node_idx).unwrap().set_total(total_nodes);
-                    let end_if_label = self.get_new_scope();
-                    stack.push(new_annotation(Some(AnnotationNode::Label(format!(
-                        "_end_if_block_{}",
-                        end_if_label
+                    let if_idx = self.get_new_scope();
+                    stack.push(new_annotation(Some(AnnotationNode::EndIf(format!(
+                        "_if_{}",
+                        if_idx
                     )))));
-                    for if_case in if_cases.iter().rev() {
-                        let end_block_label = self.get_new_scope();
-                        stack.push(new_annotation(Some(AnnotationNode::Label(format!(
-                            "_end_case_block_{}",
-                            end_block_label
-                        )))));
+                    for (n, if_case) in if_cases.iter().rev().enumerate() {
                         stack.push(new_sem_node(
                             Node::BlockNode(if_case.block.clone().into()),
                             types::Type::Unknown,
@@ -521,18 +523,27 @@ impl ProgramState {
                             false,
                             Some(node_idx),
                         ));
-                        stack.push(new_annotation(Some(AnnotationNode::IfCase(
-                            format!("_end_case_block_{}", end_block_label),
-                            format!("_end_if_block_{}", end_if_label),
-                        ))));
-                        stack.push(new_sem_node(
-                            Node::ExprNode(if_case.condition.clone()),
-                            types::Type::Unknown,
-                            0,
-                            false,
-                            Some(node_idx),
-                        ));
+                        stack.push(new_annotation(Some(if n == total_nodes {
+                            AnnotationNode::IfCase(format!("_if_{}", if_idx))
+                        } else if n == 0 && if_case.is_else {
+                            AnnotationNode::ElseCase(format!("_if_{}", if_idx))
+                        } else {
+                            AnnotationNode::ElseIfCase(format!("_if_{}", if_idx))
+                        })));
+                        if !if_case.is_else {
+                            stack.push(new_sem_node(
+                                Node::ExprNode(if_case.condition.clone()),
+                                types::Type::Unknown,
+                                0,
+                                false,
+                                Some(node_idx),
+                            ));
+                        }
                     }
+                    stack.push(new_annotation(Some(AnnotationNode::If(format!(
+                        "_if_{}",
+                        if_idx
+                    )))));
                 } else if progress == total_nodes {
                     stack.get_mut(node_idx).unwrap().set_checked();
                     self.rebase_stack(stack, node_idx);
@@ -1020,11 +1031,20 @@ impl ProgramState {
             AnnotationNode::Label(label) => {
                 self.ins_label_index(label);
             }
-            AnnotationNode::IfCase(end_block_label, end_if_label) => {
-                self.build_stack.push(IRNode::IfCase(ir::IfCase {
-                    end_block_label: ir::Label(end_block_label),
-                    end_if_label: ir::Label(end_if_label),
-                }));
+            AnnotationNode::If(if_label) => {
+                self.build_stack.push(IRNode::If(if_label));
+            }
+            AnnotationNode::IfCase(if_label) => {
+                self.build_stack.push(IRNode::IfCase(if_label));
+            }
+            AnnotationNode::ElseIfCase(if_label) => {
+                self.build_stack.push(IRNode::ElseIfCase(if_label));
+            }
+            AnnotationNode::ElseCase(if_label) => {
+                self.build_stack.push(IRNode::ElseCase(if_label));
+            }
+            AnnotationNode::EndIf(if_label) => {
+                self.build_stack.push(IRNode::EndIf(if_label));
             }
         }
         stack.pop();

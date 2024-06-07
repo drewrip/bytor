@@ -40,15 +40,15 @@ Comma<T>: Vec<T> = {
 };
 
 pub IfCase: Arc<IfCase> = {
-    "if" <e:Expr> "then" <b:Stmts> => Arc::new(IfCase {condition: e, block: b}),
+    "if" <e:Expr> "then" <b:Stmts> => Arc::new(IfCase {condition: e, block: b, is_else: false}),
 };
 
 pub ElseIfCase: Arc<IfCase> = {
-    "else" "if" <e:Expr> "then" <b:Stmts> => Arc::new(IfCase {condition: e, block: b}),
+    "else" "if" <e:Expr> "then" <b:Stmts> => Arc::new(IfCase {condition: e, block: b, is_else: false}),
 };
 
 pub ElseCase: Arc<IfCase> = {
-    "else" "then" <b:Stmts> => Arc::new(IfCase {condition: Arc::new(Expr::Term(Arc::new(Term::Bool(true)))), block: b}),
+    "else" "then" <b:Stmts> => Arc::new(IfCase {condition: Arc::new(Expr::Term(Arc::new(Term::Bool(true)))), block: b, is_else: true}),
 };
 
 pub Stmt: Arc<Stmt> = {

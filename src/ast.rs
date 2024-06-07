@@ -85,6 +85,7 @@ pub enum AssignOp {
 pub struct IfCase {
     pub condition: Arc<Expr>,
     pub block: Block,
+    pub is_else: bool,
 }
 
 pub type IfCases = Vec<Arc<IfCase>>;
