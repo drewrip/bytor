@@ -65,7 +65,6 @@ pub struct CGenContext {
     outfile: String,
     skip_validation: bool,
     code_buffer: Vec<String>,
-    label_scope_counter: HashMap<String, usize>,
 }
 
 impl From<CodeGenContext> for CGenContext {
@@ -75,7 +74,6 @@ impl From<CodeGenContext> for CGenContext {
             outfile: ctx.outfile,
             skip_validation: ctx.skip_validation,
             code_buffer: vec![],
-            label_scope_counter: HashMap::new(),
         }
     }
 }
@@ -145,12 +143,18 @@ impl CGenContext {
             node_idx = match self.build_stack.get(node_idx).unwrap() {
                 IRNode::Term(term) => self.gen_term(node_idx).unwrap(),
                 IRNode::Eval(eval) => self.gen_eval(node_idx).unwrap(),
-                IRNode::IfCase(if_case) => self.gen_if(node_idx).unwrap(),
                 IRNode::Label(label) => self.gen_label(node_idx).unwrap(),
                 IRNode::Assign(assign) => self.gen_assign(node_idx, assign.clone()).unwrap(),
                 IRNode::Reassign(reassign) => {
                     self.gen_reassign(node_idx, reassign.clone()).unwrap()
                 }
+                // If Statement
+                IRNode::If(if_case) => self.gen_if(node_idx).unwrap(),
+                IRNode::IfCase(if_case) => self.gen_if_case(node_idx).unwrap(),
+                IRNode::ElseIfCase(if_case) => self.gen_else_if_case(node_idx).unwrap(),
+                IRNode::ElseCase(if_case) => self.gen_else_case(node_idx).unwrap(),
+                IRNode::EndIf(if_case) => self.gen_end_if(node_idx).unwrap(),
+                // Return
                 IRNode::Return(ret) => self.gen_return(node_idx).unwrap(),
                 other => {
                     panic!("Unimplemented IRNode: {:?}", other);
@@ -166,10 +170,6 @@ impl CGenContext {
     }
 
     fn gen_eval(&mut self, idx: usize) -> Result<usize, CodeGenError> {
-        Ok(idx - 1)
-    }
-
-    fn gen_if(&mut self, idx: usize) -> Result<usize, CodeGenError> {
         Ok(idx - 1)
     }
 
@@ -255,6 +255,41 @@ impl CGenContext {
         }
         self.add_code(&stack.pop().unwrap());
         Ok(())
+    }
+
+    fn gen_if(&mut self, idx: usize) -> Result<usize, CodeGenError> {
+        Ok(idx - 1)
+    }
+
+    fn gen_if_case(&mut self, idx: usize) -> Result<usize, CodeGenError> {
+        self.add_code("if");
+        self.add_code("(");
+        self.gen_expr(idx + 1);
+        self.add_code(")");
+        self.add_code("{");
+        Ok(idx - 1)
+    }
+
+    fn gen_else_if_case(&mut self, idx: usize) -> Result<usize, CodeGenError> {
+        self.add_code("}");
+        self.add_code("else if");
+        self.add_code("(");
+        self.gen_expr(idx + 1);
+        self.add_code(")");
+        self.add_code("{");
+        Ok(idx - 1)
+    }
+
+    fn gen_else_case(&mut self, idx: usize) -> Result<usize, CodeGenError> {
+        self.add_code("}");
+        self.add_code("else");
+        self.add_code("{");
+        Ok(idx - 1)
+    }
+
+    fn gen_end_if(&mut self, idx: usize) -> Result<usize, CodeGenError> {
+        self.add_code("}");
+        Ok(idx - 1)
     }
 
     fn gen_return(&mut self, idx: usize) -> Result<usize, CodeGenError> {

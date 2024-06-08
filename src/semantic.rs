@@ -523,7 +523,7 @@ impl ProgramState {
                             false,
                             Some(node_idx),
                         ));
-                        stack.push(new_annotation(Some(if n == total_nodes {
+                        stack.push(new_annotation(Some(if n == if_cases.len() - 1 {
                             AnnotationNode::IfCase(format!("_if_{}", if_idx))
                         } else if n == 0 && if_case.is_else {
                             AnnotationNode::ElseCase(format!("_if_{}", if_idx))
