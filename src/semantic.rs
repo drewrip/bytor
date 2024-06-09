@@ -3,7 +3,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use crate::ast::{AssignOp, Block, Expr, Func, Node, Program, Root, Stmt, Term};
-use crate::ir::{self, IRNode};
+use crate::ir::{self, IRNode, Signature};
 use crate::symbol::{new_symbol, new_var, IdentMapping, Symbol, Symbolic, Var};
 use crate::types::{self, Type};
 
@@ -30,6 +30,9 @@ pub enum AnnotationNode {
     ElseIfCase(String),
     ElseCase(String),
     EndIf(String),
+    FuncDef(ir::FuncDef, String),
+    EndFuncDef(String),
+    Eval(ir::Func),
 }
 
 pub fn new_sem_node(
@@ -676,8 +679,7 @@ impl ProgramState {
                         stack.get_mut(node_idx).unwrap().set_checked();
                         self.rebase_stack(stack, node_idx);
                         self.inc_parent(stack, node_idx);
-                        self.build_stack
-                            .push(IRNode::Return(ir::Label("program".to_string())));
+                        self.build_stack.push(IRNode::Return);
                         stack.pop();
                     }
                     other => panic!(
@@ -693,18 +695,36 @@ impl ProgramState {
 
     fn check_expr(&mut self, stack: &mut Vec<SemNode>, node_idx: usize, expr: Expr) -> Result<()> {
         let progress = stack.get_mut(node_idx).unwrap().get_prog();
-        match expr {
+        match expr.clone() {
             Expr::Add(lhs, rhs) => {
-                self.binary_op(stack, node_idx, progress, ir::Func::Add, lhs, rhs);
+                self.binary_op(stack, node_idx, progress, expr.clone(), lhs, rhs);
             }
             Expr::Sub(lhs, rhs) => {
-                self.binary_op(stack, node_idx, progress, ir::Func::Sub, lhs, rhs);
+                self.binary_op(stack, node_idx, progress, expr.clone(), lhs, rhs);
             }
             Expr::Mult(lhs, rhs) => {
-                self.binary_op(stack, node_idx, progress, ir::Func::Mult, lhs, rhs);
+                self.binary_op(stack, node_idx, progress, expr.clone(), lhs, rhs);
             }
             Expr::Div(lhs, rhs) => {
-                self.binary_op(stack, node_idx, progress, ir::Func::Div, lhs, rhs);
+                self.binary_op(stack, node_idx, progress, expr.clone(), lhs, rhs);
+            }
+            Expr::Eq(lhs, rhs) => {
+                self.binary_op(stack, node_idx, progress, expr.clone(), lhs, rhs);
+            }
+            Expr::Neq(lhs, rhs) => {
+                self.binary_op(stack, node_idx, progress, expr.clone(), lhs, rhs);
+            }
+            Expr::Leq(lhs, rhs) => {
+                self.binary_op(stack, node_idx, progress, expr.clone(), lhs, rhs);
+            }
+            Expr::Geq(lhs, rhs) => {
+                self.binary_op(stack, node_idx, progress, expr.clone(), lhs, rhs);
+            }
+            Expr::LessThan(lhs, rhs) => {
+                self.binary_op(stack, node_idx, progress, expr.clone(), lhs, rhs);
+            }
+            Expr::GreaterThan(lhs, rhs) => {
+                self.binary_op(stack, node_idx, progress, expr.clone(), lhs, rhs);
             }
             Expr::Term(term) => {
                 match progress {
@@ -732,24 +752,6 @@ impl ProgramState {
                     ),
                 }
             }
-            Expr::Eq(lhs, rhs) => {
-                self.binary_op(stack, node_idx, progress, ir::Func::Eq, lhs, rhs);
-            }
-            Expr::Neq(lhs, rhs) => {
-                self.binary_op(stack, node_idx, progress, ir::Func::Neq, lhs, rhs);
-            }
-            Expr::Leq(lhs, rhs) => {
-                self.binary_op(stack, node_idx, progress, ir::Func::Leq, lhs, rhs);
-            }
-            Expr::Geq(lhs, rhs) => {
-                self.binary_op(stack, node_idx, progress, ir::Func::Geq, lhs, rhs);
-            }
-            Expr::LessThan(lhs, rhs) => {
-                self.binary_op(stack, node_idx, progress, ir::Func::Lt, lhs, rhs);
-            }
-            Expr::GreaterThan(lhs, rhs) => {
-                self.binary_op(stack, node_idx, progress, ir::Func::Gt, lhs, rhs);
-            }
             Expr::Call(symbol, args) => {
                 let num_args = args.len();
                 if progress == 0 {
@@ -771,8 +773,6 @@ impl ProgramState {
                             Some(node_idx),
                         ));
                     }
-                    self.build_stack
-                        .push(IRNode::Eval(ir::Func::DefFunc(symbol)));
                 } else if progress == num_args {
                     let func_var = self.slookup(symbol.clone()).unwrap();
                     let func_type = match func_var.type_t.clone() {
@@ -784,6 +784,7 @@ impl ProgramState {
                     while stack.len() - 1 != node_idx {
                         resolved_types.push(stack.pop().unwrap().get_type());
                     }
+                    let mut resolved_param_types = vec![];
                     for (arg_type, param_type) in resolved_types.iter().rev().zip(param_types) {
                         println!(
                             "{}: {:?} == {:?}",
@@ -794,14 +795,22 @@ impl ProgramState {
                         if param_type != *arg_type {
                             panic!(
                                 "argument to function {}(...) is incorrect type",
-                                symbol.ident
+                                symbol.ident.clone()
                             )
                         }
+                        resolved_param_types.push(arg_type.clone());
                     }
                     let return_t = func_type.return_t.first().unwrap().clone();
-                    stack.get_mut(node_idx).unwrap().set_type(return_t);
+                    stack.get_mut(node_idx).unwrap().set_type(return_t.clone());
                     stack.get_mut(node_idx).unwrap().set_checked();
                     self.inc_parent(stack, node_idx);
+                    stack.push(new_annotation(Some(AnnotationNode::Eval(ir::Func::Func(
+                        Signature {
+                            symbol,
+                            params_t: resolved_param_types,
+                            return_t,
+                        },
+                    )))));
                 } else {
                     panic!(
                         "error: progress={} doesn't match any possible for Expr::Call",
@@ -937,12 +946,19 @@ impl ProgramState {
                 let block = func.block;
                 self.spush();
                 let params = func.params;
-                for param in params {
+                let mut params_t = vec![];
+                for param in params.clone() {
                     let param_type = param.type_t.clone();
+                    params_t.push((param.ident.clone(), param_type.clone()));
                     let symbol = new_symbol(param.ident.clone());
                     let var = new_var(param_type, Node::SymbolNode(symbol.clone()));
                     self.sinsert(symbol, var);
                 }
+                let func_scope_num = self.get_new_scope();
+                let func_label = format!("_func_def_{}", func_scope_num);
+                stack.push(new_annotation(Some(AnnotationNode::EndFuncDef(
+                    func_label.clone(),
+                ))));
                 stack.push(new_sem_node(
                     Node::BlockNode(block.into()),
                     types::Type::Unknown,
@@ -950,6 +966,14 @@ impl ProgramState {
                     false,
                     Some(node_idx),
                 ));
+                stack.push(new_annotation(Some(AnnotationNode::FuncDef(
+                    ir::FuncDef {
+                        symbol: new_symbol(func.ident.clone()),
+                        params_t,
+                        return_t: func.ret_t,
+                    },
+                    func_label,
+                ))));
             }
             1 => {
                 // Both sub expressions checked!
@@ -957,6 +981,18 @@ impl ProgramState {
                 stack.get_mut(node_idx).unwrap().add_symbols(self.spop());
                 // Increment progress of parent
                 self.inc_parent(stack, node_idx);
+                self.build_stack.push(IRNode::Assign(ir::Assign {
+                    symbol: new_symbol(func.ident),
+                    type_t: Type::Function(types::FunctionType {
+                        params_t: func
+                            .params
+                            .into_iter()
+                            .map(|p| (*p).clone().type_t)
+                            .collect(),
+                        return_t: vec![func.ret_t],
+                        with_t: vec![],
+                    }),
+                }));
             }
             other => panic!(
                 "error: progress={} doesn't match any possible for func",
@@ -971,7 +1007,7 @@ impl ProgramState {
         stack: &mut Vec<SemNode>,
         node_idx: usize,
         progress: usize,
-        operator: ir::Func,
+        operator: Expr,
         lhs: Arc<Expr>,
         rhs: Arc<Expr>,
     ) -> Result<()> {
@@ -1006,10 +1042,64 @@ impl ProgramState {
                     panic!("type error: {:?}({:?}, {:?})", operator, oper1, oper2);
                 }
                 stack.get_mut(node_idx).unwrap().set_checked();
-                stack.get_mut(node_idx).unwrap().set_type(oper1);
+                stack.get_mut(node_idx).unwrap().set_type(oper1.clone());
                 // Increment progress of parent
                 self.inc_parent(stack, node_idx);
-                self.build_stack.push(IRNode::Eval(operator));
+                // Resolve the signature of the function that should be added in the IR
+                let resolved_func = match operator.clone() {
+                    Expr::Add(_, _) => ir::Func::Add(ir::new_sig(
+                        "Add",
+                        vec![oper1.clone(), oper2.clone()],
+                        oper1.clone(),
+                    )),
+                    Expr::Sub(_, _) => ir::Func::Sub(ir::new_sig(
+                        "Sub",
+                        vec![oper1.clone(), oper2.clone()],
+                        oper1.clone(),
+                    )),
+                    Expr::Mult(_, _) => ir::Func::Mult(ir::new_sig(
+                        "Mult",
+                        vec![oper1.clone(), oper2.clone()],
+                        oper1.clone(),
+                    )),
+                    Expr::Div(_, _) => ir::Func::Div(ir::new_sig(
+                        "Div",
+                        vec![oper1.clone(), oper2.clone()],
+                        oper1.clone(),
+                    )),
+                    Expr::Eq(_, _) => ir::Func::Eq(ir::new_sig(
+                        "Eq",
+                        vec![oper1.clone(), oper2.clone()],
+                        oper1.clone(),
+                    )),
+                    Expr::Neq(_, _) => ir::Func::Neq(ir::new_sig(
+                        "Neq",
+                        vec![oper1.clone(), oper2.clone()],
+                        oper1.clone(),
+                    )),
+                    Expr::Leq(_, _) => ir::Func::Leq(ir::new_sig(
+                        "Leq",
+                        vec![oper1.clone(), oper2.clone()],
+                        oper1.clone(),
+                    )),
+                    Expr::Geq(_, _) => ir::Func::Geq(ir::new_sig(
+                        "Geq",
+                        vec![oper1.clone(), oper2.clone()],
+                        oper1.clone(),
+                    )),
+                    Expr::LessThan(_, _) => ir::Func::Lt(ir::new_sig(
+                        "Lt",
+                        vec![oper1.clone(), oper2.clone()],
+                        oper1.clone(),
+                    )),
+                    Expr::GreaterThan(_, _) => ir::Func::Gt(ir::new_sig(
+                        "Gt",
+                        vec![oper1.clone(), oper2.clone()],
+                        oper1.clone(),
+                    )),
+                    _ => panic!("Not sure how to represent {:?} in IR!", operator),
+                };
+                self.build_stack.push(IRNode::Eval(resolved_func));
             }
             other => panic!(
                 "error: progress={} doesn't match any possible for {:?}",
@@ -1045,6 +1135,16 @@ impl ProgramState {
             }
             AnnotationNode::EndIf(if_label) => {
                 self.build_stack.push(IRNode::EndIf(if_label));
+            }
+            AnnotationNode::FuncDef(signature, func_label) => {
+                self.build_stack
+                    .push(IRNode::FuncDef(signature, func_label));
+            }
+            AnnotationNode::EndFuncDef(func_label) => {
+                self.build_stack.push(IRNode::EndFuncDef(func_label));
+            }
+            AnnotationNode::Eval(func) => {
+                self.build_stack.push(IRNode::Eval(func));
             }
         }
         stack.pop();

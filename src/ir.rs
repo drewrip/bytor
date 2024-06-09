@@ -1,21 +1,27 @@
-use crate::ast::Node;
-use crate::semantic;
-use crate::symbol::Symbol;
+use crate::ast::Param;
+use crate::symbol::{new_symbol, Symbol};
 use crate::types::Type;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum IRNode {
-    Label(Label),
+    // Mutate State
     Assign(Assign),
     Reassign(Reassign),
+    // If statements
     If(String),
     IfCase(String),
     ElseIfCase(String),
     ElseCase(String),
     EndIf(String),
+    // Expression nodes
     Term(Term),
     Eval(Func),
-    Return(Label),
+    // Function Definition\
+    FuncDef(FuncDef, String),
+    EndFuncDef(String),
+    // Extra
+    Return,
+    Label(Label),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -59,15 +65,45 @@ pub enum Value {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Func {
-    Add,
-    Sub,
-    Mult,
-    Div,
-    Lt,
-    Gt,
-    Leq,
-    Geq,
-    Eq,
-    Neq,
-    DefFunc(Symbol),
+    Add(Signature),
+    Sub(Signature),
+    Mult(Signature),
+    Div(Signature),
+    Lt(Signature),
+    Gt(Signature),
+    Leq(Signature),
+    Geq(Signature),
+    Eq(Signature),
+    Neq(Signature),
+    Func(Signature),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Signature {
+    pub symbol: Symbol,
+    pub params_t: Vec<Type>,
+    pub return_t: Type,
+}
+
+pub fn new_sig(ident: &str, params_t: Vec<Type>, return_t: Type) -> Signature {
+    Signature {
+        symbol: new_symbol(ident.to_string()),
+        params_t,
+        return_t,
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct FuncDef {
+    pub symbol: Symbol,
+    pub params_t: Vec<(String, Type)>,
+    pub return_t: Type,
+}
+
+pub fn new_func_def(ident: &str, params_t: Vec<(String, Type)>, return_t: Type) -> FuncDef {
+    FuncDef {
+        symbol: new_symbol(ident.to_string()),
+        params_t,
+        return_t,
+    }
 }

@@ -1,5 +1,5 @@
 use crate::codegen::{CodeGen, CodeGenContext, CodeGenError};
-use crate::ir::{self, IRNode};
+use crate::ir::{self, FuncDef, IRNode};
 use crate::types::Type;
 use anyhow::{bail, Error, Result};
 use std::fs::File;
@@ -70,7 +70,7 @@ pub struct CGenContext {
 impl From<CodeGenContext> for CGenContext {
     fn from(ctx: CodeGenContext) -> Self {
         CGenContext {
-            build_stack: ctx.build_stack,
+            build_stack: ctx.build_stack.into_iter().rev().collect(),
             outfile: ctx.outfile,
             skip_validation: ctx.skip_validation,
             code_buffer: vec![],
@@ -81,8 +81,8 @@ impl From<CodeGenContext> for CGenContext {
 impl CodeGen for CGenContext {
     fn gen(&mut self) -> Result<(), CodeGenError> {
         self.gen_includes();
-        self.gen_globals();
-        self.gen_program(self.build_stack.len() - 1);
+        let start = self.gen_globals();
+        self.gen_program(start);
 
         let final_source = self.code_buffer.join(" ");
         let mut file =
@@ -118,28 +118,20 @@ impl CGenContext {
         Ok(())
     }
 
-    fn gen_globals(&mut self) {
-        // For now, through out all global nodes
-        while (*self.build_stack.last().unwrap()).clone()
-            != IRNode::Label(ir::Label("_globals_start".into()))
-        {
-            self.build_stack.pop();
-        }
-
-        while (*self.build_stack.last().unwrap()).clone()
+    fn gen_globals(&mut self) -> usize {
+        let mut idx = 0;
+        while (*self.build_stack.get(idx).unwrap()).clone()
             != IRNode::Label(ir::Label("_globals_end".into()))
         {
-            self.build_stack.pop();
+            idx += 1;
         }
-
-        // Pop the _globals_end label off
-        self.build_stack.pop();
+        idx + 1
     }
 
     fn gen_program(&mut self, idx: usize) {
         self.add_code("int main(){");
         let mut node_idx = idx;
-        while !self.build_stack.is_empty() && node_idx != 0 {
+        while node_idx < self.build_stack.len() {
             node_idx = match self.build_stack.get(node_idx).unwrap() {
                 IRNode::Term(term) => self.gen_term(node_idx).unwrap(),
                 IRNode::Eval(eval) => self.gen_eval(node_idx).unwrap(),
@@ -154,52 +146,57 @@ impl CGenContext {
                 IRNode::ElseIfCase(if_case) => self.gen_else_if_case(node_idx).unwrap(),
                 IRNode::ElseCase(if_case) => self.gen_else_case(node_idx).unwrap(),
                 IRNode::EndIf(if_case) => self.gen_end_if(node_idx).unwrap(),
+                // Function Definitions
+                IRNode::FuncDef(def, _) => self.gen_func_def(node_idx, def.clone()).unwrap(),
+                IRNode::EndFuncDef(_) => self.gen_end_func_def(node_idx).unwrap(),
                 // Return
-                IRNode::Return(ret) => self.gen_return(node_idx).unwrap(),
+                IRNode::Return => self.gen_return(node_idx).unwrap(),
                 other => {
                     panic!("Unimplemented IRNode: {:?}", other);
                 }
-            }
+            };
         }
-        self.add_code("return 0;");
         self.add_code("}");
     }
 
     fn gen_term(&mut self, idx: usize) -> Result<usize, CodeGenError> {
-        Ok(idx - 1)
+        Ok(idx + 1)
     }
 
     fn gen_eval(&mut self, idx: usize) -> Result<usize, CodeGenError> {
-        Ok(idx - 1)
+        Ok(idx + 1)
     }
 
     fn gen_label(&mut self, idx: usize) -> Result<usize, CodeGenError> {
-        Ok(idx - 1)
+        Ok(idx + 1)
     }
 
     fn gen_assign(&mut self, idx: usize, assign: ir::Assign) -> Result<usize, CodeGenError> {
-        self.add_code(&translate_type(assign.type_t));
-        self.add_code(&assign.symbol.ident.clone());
-        self.add_code("=");
-        self.gen_expr(idx + 1);
-        self.add_code(";");
-        Ok(idx - 1)
+        if !matches_variant!(assign.type_t, Type::Function) {
+            self.add_code(&translate_type(assign.type_t));
+            self.add_code(&assign.symbol.ident.clone());
+            self.add_code("=");
+            self.gen_expr(idx - 1);
+            self.add_code(";");
+        }
+        Ok(idx + 1)
     }
 
     fn gen_reassign(&mut self, idx: usize, reassign: ir::Reassign) -> Result<usize, CodeGenError> {
         self.add_code(&*reassign.symbol.ident.clone());
         self.add_code("=");
-        self.gen_expr(idx + 1);
+        self.gen_expr(idx - 1);
         self.add_code(";");
-        Ok(idx - 1)
+        Ok(idx + 1)
     }
 
     fn gen_expr(&mut self, idx: usize) -> Result<(), CodeGenError> {
         // Collect
-        let mut expr: Vec<IRNode> = self
+        let expr: Vec<IRNode> = self
             .build_stack
             .iter()
-            .skip(idx)
+            .rev()
+            .skip(self.build_stack.len() - idx - 1)
             .take_while(|node| is_expr_node((*node).clone()))
             .cloned()
             .collect();
@@ -212,38 +209,48 @@ impl CGenContext {
                 IRNode::Eval(eval) => {
                     let mut sub_expr: Vec<String> = vec!["(".into()];
                     let evaluated = match eval {
-                        ir::Func::Add => {
+                        ir::Func::Add(_) => {
                             format!("{} + {}", stack.pop().unwrap(), stack.pop().unwrap())
                         }
-                        ir::Func::Sub => {
+                        ir::Func::Sub(_) => {
                             format!("{} - {}", stack.pop().unwrap(), stack.pop().unwrap())
                         }
-                        ir::Func::Mult => {
+                        ir::Func::Mult(_) => {
                             format!("{} * {}", stack.pop().unwrap(), stack.pop().unwrap())
                         }
-                        ir::Func::Div => {
+                        ir::Func::Div(_) => {
                             format!("{} / {}", stack.pop().unwrap(), stack.pop().unwrap())
                         }
-                        ir::Func::Lt => {
+                        ir::Func::Lt(_) => {
                             format!("{} < {}", stack.pop().unwrap(), stack.pop().unwrap())
                         }
-                        ir::Func::Gt => {
+                        ir::Func::Gt(_) => {
                             format!("{} > {}", stack.pop().unwrap(), stack.pop().unwrap())
                         }
-                        ir::Func::Leq => {
+                        ir::Func::Leq(_) => {
                             format!("{} <= {}", stack.pop().unwrap(), stack.pop().unwrap())
                         }
-                        ir::Func::Geq => {
+                        ir::Func::Geq(_) => {
                             format!("{} >= {}", stack.pop().unwrap(), stack.pop().unwrap())
                         }
-                        ir::Func::Eq => {
+                        ir::Func::Eq(_) => {
                             format!("{} == {}", stack.pop().unwrap(), stack.pop().unwrap())
                         }
-                        ir::Func::Neq => {
+                        ir::Func::Neq(_) => {
                             format!("{} != {}", stack.pop().unwrap(), stack.pop().unwrap())
                         }
-                        ir::Func::DefFunc(_) => {
-                            panic!("User defined function calls not handled yet!")
+                        ir::Func::Func(sig) => {
+                            let mut call: String = sig.symbol.ident.clone();
+                            call.push_str("(");
+                            let num_params = sig.params_t.len();
+                            for i in 0..num_params {
+                                call.push_str(&stack.pop().unwrap());
+                                if i != num_params - 1 {
+                                    call.push_str(", ");
+                                }
+                            }
+                            call.push_str(")");
+                            call
                         }
                     };
                     sub_expr.push(evaluated);
@@ -258,41 +265,66 @@ impl CGenContext {
     }
 
     fn gen_if(&mut self, idx: usize) -> Result<usize, CodeGenError> {
-        Ok(idx - 1)
+        Ok(idx + 1)
     }
 
     fn gen_if_case(&mut self, idx: usize) -> Result<usize, CodeGenError> {
         self.add_code("if");
         self.add_code("(");
-        self.gen_expr(idx + 1);
+        self.gen_expr(idx - 1);
         self.add_code(")");
         self.add_code("{");
-        Ok(idx - 1)
+        Ok(idx + 1)
     }
 
     fn gen_else_if_case(&mut self, idx: usize) -> Result<usize, CodeGenError> {
         self.add_code("}");
         self.add_code("else if");
         self.add_code("(");
-        self.gen_expr(idx + 1);
+        self.gen_expr(idx - 1);
         self.add_code(")");
         self.add_code("{");
-        Ok(idx - 1)
+        Ok(idx + 1)
     }
 
     fn gen_else_case(&mut self, idx: usize) -> Result<usize, CodeGenError> {
         self.add_code("}");
         self.add_code("else");
         self.add_code("{");
-        Ok(idx - 1)
+        Ok(idx + 1)
     }
 
     fn gen_end_if(&mut self, idx: usize) -> Result<usize, CodeGenError> {
         self.add_code("}");
-        Ok(idx - 1)
+        Ok(idx + 1)
+    }
+
+    fn gen_func_def(&mut self, idx: usize, def: FuncDef) -> Result<usize, CodeGenError> {
+        self.add_code(&translate_type(def.return_t));
+        self.add_code(&def.symbol.ident);
+        self.add_code("(");
+        let num_params = def.params_t.clone().len();
+        for (n, param) in def.params_t.into_iter().enumerate() {
+            self.add_code(&translate_type(param.1));
+            self.add_code(&param.0);
+            if n != num_params - 1 {
+                self.add_code(",");
+            }
+        }
+        self.add_code(")");
+        self.add_code("{");
+        Ok(idx + 1)
+    }
+
+    fn gen_end_func_def(&mut self, idx: usize) -> Result<usize, CodeGenError> {
+        self.add_code("}");
+        Ok(idx + 1)
     }
 
     fn gen_return(&mut self, idx: usize) -> Result<usize, CodeGenError> {
-        Ok(idx - 1)
+        self.add_code("return");
+        self.gen_expr(idx - 1);
+        self.add_code(";");
+        Ok(idx + 1)
     }
 }

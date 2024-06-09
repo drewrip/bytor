@@ -104,7 +104,7 @@ pub type Args = Vec<Arc<Expr>>;
 
 pub type Params = Vec<Arc<Param>>;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Param {
     pub type_t: types::Type,
     pub ident: String,

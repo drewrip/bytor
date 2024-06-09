@@ -1,0 +1,15 @@
+program test_program
+
+  function baz(x: int32, y: int32, z: int32) -> int32
+    let w = x + y + z;
+    return w;
+  end
+
+  let x: int32 = 10;
+  let y: int32 = 12;
+  let z: int32 = 13;
+
+  let res = baz(x, y, z);
+
+  return res;
+end
