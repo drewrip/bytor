@@ -133,7 +133,6 @@ impl CGenContext {
             .find(|(_, ir_node)| matches_variant!(ir_node, IRNode::EndGlobalSection))
             .unwrap()
             .0;
-        println!("end_of_globals: {}", end_of_globals);
         self.gen_code(idx, end_of_globals - 1) + 2
     }
 

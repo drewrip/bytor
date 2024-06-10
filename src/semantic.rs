@@ -140,7 +140,6 @@ pub struct ProgramState {
     pub stack: SymbolStack,
     pub ast: Arc<Root>,
     pub build_stack: Vec<IRNode>,
-    pub label_map: HashMap<String, usize>,
     pub scope_counter: usize,
 }
 
@@ -149,7 +148,6 @@ pub fn new_state(ast: Arc<Root>) -> ProgramState {
         stack: vec![],
         build_stack: vec![],
         ast,
-        label_map: HashMap::new(),
         scope_counter: 0,
     }
 }
@@ -1122,7 +1120,7 @@ impl ProgramState {
         stack.get_mut(node_idx).unwrap().set_checked();
         match annotation {
             AnnotationNode::Label(label) => {
-                self.ins_label_index(label);
+                self.ins_label(label);
             }
             AnnotationNode::If(if_label) => {
                 self.build_stack.push(IRNode::If(if_label));
@@ -1174,13 +1172,6 @@ impl ProgramState {
 
     fn ins_label(&mut self, label: String) {
         self.build_stack.push(IRNode::Label(ir::Label(label)));
-    }
-
-    fn ins_label_index(&mut self, label: String) {
-        let mapped_index = self.build_stack.len();
-        self.build_stack
-            .push(IRNode::Label(ir::Label(label.clone())));
-        self.label_map.insert(label, mapped_index);
     }
 }
 
