@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 
 use crate::ast;
 use crate::types;
@@ -44,7 +43,7 @@ impl Symbolic for ast::Program {
                 symbol: ident.clone(),
                 var: Var {
                     type_t: types::Type::Program(types::ProgramType { with_t: vec![] }),
-                    node: ast::Node::BlockNode(Arc::new(block.clone())),
+                    node: ast::Node::BlockNode(Box::new(block.clone())),
                 },
             }),
             ast::Program::With(ident, with_vars, block) => Some(IdentMapping {
@@ -59,7 +58,7 @@ impl Symbolic for ast::Program {
                             })
                             .collect(),
                     }),
-                    node: ast::Node::BlockNode(Arc::new(block.to_vec())),
+                    node: ast::Node::BlockNode(Box::new(block.to_vec())),
                 },
             }),
         }
@@ -94,7 +93,7 @@ impl Symbolic for ast::Stmt {
                             })
                             .collect(),
                     }),
-                    node: ast::Node::BlockNode(Arc::new(func.block.clone())),
+                    node: ast::Node::BlockNode(Box::new(func.block.clone())),
                 },
             }),
             _ => None,

@@ -1,18 +1,17 @@
 use std::str::FromStr;
-use std::sync::Arc;
 use crate::ast::*;
 use crate::types::*;
 use crate::symbol::{Symbol, Var};
 
 grammar;
 
-pub Root: Arc<Root> = {
-    <pre_b:Stmts> <prog:Program> <post_b:Stmts> => Arc::new(
+pub Root: Box<Root> = {
+    <pre_b:Stmts> <prog:Program> <post_b:Stmts> => Box::new(
         Root{preblock: pre_b, program: prog, postblock: post_b}
     ),
 };
 
-pub Stmts: Vec<Arc<Stmt>> = {
+pub Stmts: Vec<Box<Stmt>> = {
     <v:(<Stmt>)*> => v,
 }
 
@@ -39,56 +38,56 @@ Comma<T>: Vec<T> = {
     }
 };
 
-pub IfCase: Arc<IfCase> = {
-    "if" <e:Expr> "then" <b:Stmts> => Arc::new(IfCase {condition: e, block: b, is_else: false}),
+pub IfCase: Box<IfCase> = {
+    "if" <e:Expr> "then" <b:Stmts> => Box::new(IfCase {condition: e, block: b, is_else: false}),
 };
 
-pub ElseIfCase: Arc<IfCase> = {
-    "else" "if" <e:Expr> "then" <b:Stmts> => Arc::new(IfCase {condition: e, block: b, is_else: false}),
+pub ElseIfCase: Box<IfCase> = {
+    "else" "if" <e:Expr> "then" <b:Stmts> => Box::new(IfCase {condition: e, block: b, is_else: false}),
 };
 
-pub ElseCase: Arc<IfCase> = {
-    "else" "then" <b:Stmts> => Arc::new(IfCase {condition: Arc::new(Expr::Term(Arc::new(Term::Bool(true)))), block: b, is_else: true}),
+pub ElseCase: Box<IfCase> = {
+    "else" "then" <b:Stmts> => Box::new(IfCase {condition: Box::new(Expr::Term(Box::new(Term::Bool(true)))), block: b, is_else: true}),
 };
 
-pub Stmt: Arc<Stmt> = {
-    "let" <i:Id> "=" <e:Expr> ";" => Arc::new(
+pub Stmt: Box<Stmt> = {
+    "let" <i:Id> "=" <e:Expr> ";" => Box::new(
         Stmt::Assign(
           Symbol{ident: i},
-          Arc::new(Var{type_t: Type::Unknown, node: Node::ExprNode(e.clone())}),
+          Box::new(Var{type_t: Type::Unknown, node: Node::ExprNode(e.clone())}),
           e
         )
     ),
-    "let" <i:Id> ":" <t:Type> "=" <e:Expr> ";" => Arc::new(
+    "let" <i:Id> ":" <t:Type> "=" <e:Expr> ";" => Box::new(
         Stmt::Assign(
           Symbol{ident: i},
-          Arc::new(Var{type_t: t, node: Node::ExprNode(e.clone())}),
+          Box::new(Var{type_t: t, node: Node::ExprNode(e.clone())}),
           e
         )
     ),
-    <i:Id> <ao:AssignOp> <e:Expr> ";" => Arc::new(
+    <i:Id> <ao:AssignOp> <e:Expr> ";" => Box::new(
         Stmt::Reassign(
           Symbol{ident: i},
-          Arc::new(Var{type_t: Type::Unknown, node: Node::ExprNode(e.clone())}),
+          Box::new(Var{type_t: Type::Unknown, node: Node::ExprNode(e.clone())}),
           ao,
           e
         )
     ),
     <ifcase:IfCase> <elseifcases:ElseIfCase*> <elsecase:ElseCase?> "end" => {
-        let elsecases: Vec<Arc<IfCase>> = match elsecase {
+        let elsecases: Vec<Box<IfCase>> = match elsecase {
             Some(elsecasepresent) => vec![elsecasepresent],
             None => vec![],
         };
-        Arc::new(Stmt::If(vec![vec![ifcase], elseifcases, elsecases].concat()))
+        Box::new(Stmt::If(vec![vec![ifcase], elseifcases, elsecases].concat()))
     },
-    <id:Id> "(" <args:Args> ")" ";" => Arc::new(Stmt::Call(Symbol{ident: id}, Arc::new(args))),
-    <f:Func> => Arc::new(Stmt::FuncDef(f)),
-    "return" <e:Expr> ";" => Arc::new(Stmt::Return(e)),
+    <id:Id> "(" <args:Args> ")" ";" => Box::new(Stmt::Call(Symbol{ident: id}, Box::new(args))),
+    <f:Func> => Box::new(Stmt::FuncDef(f)),
+    "return" <e:Expr> ";" => Box::new(Stmt::Return(e)),
 };
 
-pub Program: Arc<Program> = {
-    "program" <id:Id> <b:Stmts> "end" => Arc::new(Program::NoWith(Symbol{ident: id}, b)),
-    "program" <id:Id> <w:With> <b:Stmts> "end" => Arc::new(Program::With(Symbol{ident: id}, w, b)),
+pub Program: Box<Program> = {
+    "program" <id:Id> <b:Stmts> "end" => Box::new(Program::NoWith(Symbol{ident: id}, b)),
+    "program" <id:Id> <w:With> <b:Stmts> "end" => Box::new(Program::With(Symbol{ident: id}, w, b)),
 };
 
 pub With: With = {
@@ -97,18 +96,18 @@ pub With: With = {
 
 pub WithVars = Comma<WithVar>;
 
-pub WithVar: Arc<WithVar> = {
-    "mut" <id:Id> => Arc::new(WithVar::Mut(Symbol{ident: id})),
-    <id:Id> => Arc::new(WithVar::Imm(Symbol{ident: id})),
+pub WithVar: Box<WithVar> = {
+    "mut" <id:Id> => Box::new(WithVar::Mut(Symbol{ident: id})),
+    <id:Id> => Box::new(WithVar::Imm(Symbol{ident: id})),
 };
 
 pub Params: Params = Comma<Param>;
 
-pub Param: Arc<Param> = {
-    <id:Id> ":" <t:Type> => Arc::new(Param{type_t: t, ident: id}),
+pub Param: Box<Param> = {
+    <id:Id> ":" <t:Type> => Box::new(Param{type_t: t, ident: id}),
 };
 
-pub Func: Arc<Func> = {
+pub Func: Box<Func> = {
     "function" <id:Id> "(" <p:Params> ")" <t:("->" <Type>)?> <w:With?> <b:Stmts> "end" => {
         let ret = match t {
             None => Type::Nil,
@@ -118,34 +117,34 @@ pub Func: Arc<Func> = {
             None => vec![],
             Some(w) => w,
         };
-        Arc::new(Func{ret_t: ret, params: p, with: with, ident: id, block: b})
+        Box::new(Func{ret_t: ret, params: p, with: with, ident: id, block: b})
     },
 };
 
-pub Expr: Arc<Expr> = {
+pub Expr: Box<Expr> = {
     #[precedence(level="0")] // Highest precedence
-    <t:Term> => Arc::new(Expr::Term(t)),
-    <id:Id> "(" <args:Args> ")" => Arc::new(Expr::Call(Symbol{ident: id}, Arc::new(args))),
+    <t:Term> => Box::new(Expr::Term(t)),
+    <id:Id> "(" <args:Args> ")" => Box::new(Expr::Call(Symbol{ident: id}, Box::new(args))),
     #[precedence(level="1")] #[assoc(side="left")]
-    <l:Expr> "*" <r:Expr> => Arc::new(Expr::Mult(l, r)),
-    <l:Expr> "/" <r:Expr> => Arc::new(Expr::Div(l, r)),
+    <l:Expr> "*" <r:Expr> => Box::new(Expr::Mult(l, r)),
+    <l:Expr> "/" <r:Expr> => Box::new(Expr::Div(l, r)),
     #[precedence(level="2")] #[assoc(side="left")]
-    <l:Expr> "+" <r:Expr> => Arc::new(Expr::Add(l, r)),
-    <l:Expr> "-" <r:Expr> => Arc::new(Expr::Sub(l, r)),
+    <l:Expr> "+" <r:Expr> => Box::new(Expr::Add(l, r)),
+    <l:Expr> "-" <r:Expr> => Box::new(Expr::Sub(l, r)),
     #[precedence(level="3")] #[assoc(side="left")]
-    <l:Expr> "==" <r:Expr> => Arc::new(Expr::Eq(l, r)),
-    <l:Expr> "!=" <r:Expr> => Arc::new(Expr::Neq(l, r)),
-    <l:Expr> "<=" <r:Expr> => Arc::new(Expr::Leq(l, r)),
-    <l:Expr> ">=" <r:Expr> => Arc::new(Expr::Geq(l, r)),
-    <l:Expr> "<" <r:Expr> => Arc::new(Expr::LessThan(l, r)),
-    <l:Expr> ">" <r:Expr> => Arc::new(Expr::GreaterThan(l, r)),
+    <l:Expr> "==" <r:Expr> => Box::new(Expr::Eq(l, r)),
+    <l:Expr> "!=" <r:Expr> => Box::new(Expr::Neq(l, r)),
+    <l:Expr> "<=" <r:Expr> => Box::new(Expr::Leq(l, r)),
+    <l:Expr> ">=" <r:Expr> => Box::new(Expr::Geq(l, r)),
+    <l:Expr> "<" <r:Expr> => Box::new(Expr::LessThan(l, r)),
+    <l:Expr> ">" <r:Expr> => Box::new(Expr::GreaterThan(l, r)),
 };
 
-pub Term: Arc<Term> = {
-    <id:Id> => Arc::new(Term::Id(id)),
-    <n:Num> => Arc::new(Term::Num(n)),
-    <b:Bool> => Arc::new(Term::Bool(b)),
-    "(" <t:Expr> ")" => Arc::new(Term::Expr(t)),
+pub Term: Box<Term> = {
+    <id:Id> => Box::new(Term::Id(id)),
+    <n:Num> => Box::new(Term::Num(n)),
+    <b:Bool> => Box::new(Term::Bool(b)),
+    "(" <t:Expr> ")" => Box::new(Term::Expr(t)),
 };
 
 pub Bool: bool = {

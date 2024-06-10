@@ -1,4 +1,3 @@
-use crate::ast::Param;
 use crate::symbol::{new_symbol, Symbol};
 use crate::types::Type;
 

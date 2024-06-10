@@ -1,12 +1,11 @@
 use crate::codegen::{CodeGen, CodeGenContext, CodeGenError};
 use crate::ir::{self, FuncDef, IRNode};
 use crate::types::Type;
-use anyhow::{bail, Error, Result};
+use anyhow::{Result};
 use std::fs::File;
 use std::io::Write;
 use std::process::Command;
 
-use std::collections::HashMap;
 
 macro_rules! matches_variant {
     ($val:expr, $var:path) => {

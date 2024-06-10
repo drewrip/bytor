@@ -1,36 +1,33 @@
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-
-use crate::semantic;
 use crate::symbol::{Symbol, Var};
 use crate::types;
 
-pub type Block = Vec<Arc<Stmt>>;
+pub type Block = Vec<Box<Stmt>>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Node {
-    RootNode(Arc<Root>),
-    ProgramNode(Arc<Program>),
-    WithNode(Arc<With>),
-    WithVarNode(Arc<WithVar>),
-    BlockNode(Arc<Block>),
-    ExprNode(Arc<Expr>),
+    RootNode(Box<Root>),
+    ProgramNode(Box<Program>),
+    WithNode(Box<With>),
+    WithVarNode(Box<WithVar>),
+    BlockNode(Box<Block>),
+    ExprNode(Box<Expr>),
     AssignOpNode(AssignOp),
-    StmtNode(Arc<Stmt>),
-    ArgsNode(Arc<Args>),
-    ParamsNode(Arc<Params>),
-    FuncNode(Arc<Func>),
+    StmtNode(Box<Stmt>),
+    ArgsNode(Box<Args>),
+    ParamsNode(Box<Params>),
+    FuncNode(Box<Func>),
     TypeNode(types::Type),
-    TermNode(Arc<Term>),
+    TermNode(Box<Term>),
     SymbolNode(Symbol),
-    VarNode(Arc<Var>),
+    VarNode(Box<Var>),
     Null,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Root {
     pub preblock: Block,
-    pub program: Arc<Program>,
+    pub program: Box<Program>,
     pub postblock: Block,
 }
 
@@ -40,7 +37,7 @@ pub enum Program {
     With(Symbol, With, Block),
 }
 
-pub type With = Vec<Arc<WithVar>>;
+pub type With = Vec<Box<WithVar>>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum WithVar {
@@ -50,18 +47,18 @@ pub enum WithVar {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Expr {
-    Term(Arc<Term>),
-    Add(Arc<Expr>, Arc<Expr>),
-    Sub(Arc<Expr>, Arc<Expr>),
-    Mult(Arc<Expr>, Arc<Expr>),
-    Div(Arc<Expr>, Arc<Expr>),
-    Eq(Arc<Expr>, Arc<Expr>),
-    Neq(Arc<Expr>, Arc<Expr>),
-    Leq(Arc<Expr>, Arc<Expr>),
-    Geq(Arc<Expr>, Arc<Expr>),
-    LessThan(Arc<Expr>, Arc<Expr>),
-    GreaterThan(Arc<Expr>, Arc<Expr>),
-    Call(Symbol, Arc<Args>),
+    Term(Box<Term>),
+    Add(Box<Expr>, Box<Expr>),
+    Sub(Box<Expr>, Box<Expr>),
+    Mult(Box<Expr>, Box<Expr>),
+    Div(Box<Expr>, Box<Expr>),
+    Eq(Box<Expr>, Box<Expr>),
+    Neq(Box<Expr>, Box<Expr>),
+    Leq(Box<Expr>, Box<Expr>),
+    Geq(Box<Expr>, Box<Expr>),
+    LessThan(Box<Expr>, Box<Expr>),
+    GreaterThan(Box<Expr>, Box<Expr>),
+    Call(Symbol, Box<Args>),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -69,7 +66,7 @@ pub enum Term {
     Id(String),
     Num(i32),
     Bool(bool),
-    Expr(Arc<Expr>),
+    Expr(Box<Expr>),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -83,26 +80,26 @@ pub enum AssignOp {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IfCase {
-    pub condition: Arc<Expr>,
+    pub condition: Box<Expr>,
     pub block: Block,
     pub is_else: bool,
 }
 
-pub type IfCases = Vec<Arc<IfCase>>;
+pub type IfCases = Vec<Box<IfCase>>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Stmt {
-    Assign(Symbol, Arc<Var>, Arc<Expr>),
-    Reassign(Symbol, Arc<Var>, AssignOp, Arc<Expr>),
+    Assign(Symbol, Box<Var>, Box<Expr>),
+    Reassign(Symbol, Box<Var>, AssignOp, Box<Expr>),
     If(IfCases),
-    Call(Symbol, Arc<Args>),
-    FuncDef(Arc<Func>),
-    Return(Arc<Expr>),
+    Call(Symbol, Box<Args>),
+    FuncDef(Box<Func>),
+    Return(Box<Expr>),
 }
 
-pub type Args = Vec<Arc<Expr>>;
+pub type Args = Vec<Box<Expr>>;
 
-pub type Params = Vec<Arc<Param>>;
+pub type Params = Vec<Box<Param>>;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Param {

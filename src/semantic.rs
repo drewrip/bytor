@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::fmt;
-use std::sync::Arc;
 
 use crate::ast::{AssignOp, Block, Expr, Func, Node, Program, Root, Stmt, Term};
 use crate::ir::{self, IRNode, Signature};
@@ -138,12 +137,12 @@ pub type SymbolStack = Vec<SymbolTable>;
 #[derive(Debug)]
 pub struct ProgramState {
     pub stack: SymbolStack,
-    pub ast: Arc<Root>,
+    pub ast: Box<Root>,
     pub build_stack: Vec<IRNode>,
     pub scope_counter: usize,
 }
 
-pub fn new_state(ast: Arc<Root>) -> ProgramState {
+pub fn new_state(ast: Box<Root>) -> ProgramState {
     ProgramState {
         stack: vec![],
         build_stack: vec![],
@@ -245,7 +244,7 @@ impl ProgramState {
         self.build_stack.push(IRNode::GlobalSection);
         let base_node = self.stack.first_mut().expect("No base node!");
         // All of the global statements
-        let stmts: Vec<Arc<Stmt>> = self
+        let stmts: Vec<Box<Stmt>> = self
             .ast
             .preblock
             .iter()
@@ -445,20 +444,20 @@ impl ProgramState {
                         ));
                         let assign_op_expr = match assign_op {
                             AssignOp::Assign => expr,
-                            AssignOp::AddAssign => Arc::new(Expr::Add(
-                                Arc::new(Expr::Term(Arc::new(Term::Id(symbol.ident.clone())))),
+                            AssignOp::AddAssign => Box::new(Expr::Add(
+                                Box::new(Expr::Term(Box::new(Term::Id(symbol.ident.clone())))),
                                 expr,
                             )),
-                            AssignOp::SubAssign => Arc::new(Expr::Sub(
-                                Arc::new(Expr::Term(Arc::new(Term::Id(symbol.ident.clone())))),
+                            AssignOp::SubAssign => Box::new(Expr::Sub(
+                                Box::new(Expr::Term(Box::new(Term::Id(symbol.ident.clone())))),
                                 expr,
                             )),
-                            AssignOp::MultAssign => Arc::new(Expr::Mult(
-                                Arc::new(Expr::Term(Arc::new(Term::Id(symbol.ident.clone())))),
+                            AssignOp::MultAssign => Box::new(Expr::Mult(
+                                Box::new(Expr::Term(Box::new(Term::Id(symbol.ident.clone())))),
                                 expr,
                             )),
-                            AssignOp::DivAssign => Arc::new(Expr::Div(
-                                Arc::new(Expr::Term(Arc::new(Term::Id(symbol.ident.clone())))),
+                            AssignOp::DivAssign => Box::new(Expr::Div(
+                                Box::new(Expr::Term(Box::new(Term::Id(symbol.ident.clone())))),
                                 expr,
                             )),
                         };
@@ -469,7 +468,7 @@ impl ProgramState {
                             false,
                             Some(node_idx),
                         ));
-                        stack.get_mut(node_idx).unwrap().ast_node = Node::StmtNode(Arc::new(
+                        stack.get_mut(node_idx).unwrap().ast_node = Node::StmtNode(Box::new(
                             Stmt::Reassign(symbol, var, assign_op, assign_op_expr),
                         ));
                     }
@@ -1009,8 +1008,8 @@ impl ProgramState {
         node_idx: usize,
         progress: usize,
         operator: Expr,
-        lhs: Arc<Expr>,
-        rhs: Arc<Expr>,
+        lhs: Box<Expr>,
+        rhs: Box<Expr>,
     ) -> Result<()> {
         match progress {
             0 => {
