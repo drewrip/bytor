@@ -244,7 +244,7 @@ impl ProgramState {
     }
 
     fn check_global_definitions(&mut self) -> Result<()> {
-        self.ins_label_index("_globals_start".into());
+        self.build_stack.push(IRNode::GlobalSection);
         let base_node = self.stack.first_mut().expect("No base node!");
         // All of the global statements
         let stmts: Vec<Arc<Stmt>> = self
@@ -282,6 +282,9 @@ impl ProgramState {
                     Node::TermNode(term) => self.check_term(&mut stack, idx, (*term).clone()),
                     Node::BlockNode(block) => self.check_block(&mut stack, idx, (*block).clone()),
                     Node::FuncNode(func) => self.check_func(&mut stack, idx, (*func).clone()),
+                    Node::Null => {
+                        self.check_annotation(&mut stack, idx, sem_node.annotation.unwrap().clone())
+                    }
                     _ => {
                         println!("node -> {:?}", sem_node.ast_node.clone());
                         panic!("AST node not yet implemented!")
@@ -289,7 +292,7 @@ impl ProgramState {
                 };
             }
         }
-        self.ins_label_index("_globals_end".into());
+        self.build_stack.push(IRNode::EndGlobalSection);
         Ok(())
     }
 

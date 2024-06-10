@@ -120,18 +120,33 @@ impl CGenContext {
 
     fn gen_globals(&mut self) -> usize {
         let mut idx = 0;
-        while (*self.build_stack.get(idx).unwrap()).clone()
-            != IRNode::Label(ir::Label("_globals_end".into()))
-        {
+        // A well formed program must start with a globals section
+        // which could be empty
+        while (*self.build_stack.get(idx).unwrap()).clone() != IRNode::GlobalSection {
             idx += 1;
         }
-        idx + 1
+        idx += 1;
+        let end_of_globals = self
+            .build_stack
+            .iter()
+            .enumerate()
+            .find(|(_, ir_node)| matches_variant!(ir_node, IRNode::EndGlobalSection))
+            .unwrap()
+            .0;
+        println!("end_of_globals: {}", end_of_globals);
+        self.gen_code(idx, end_of_globals - 1) + 2
     }
 
-    fn gen_program(&mut self, idx: usize) {
+    fn gen_program(&mut self, idx: usize) -> usize {
         self.add_code("int main(){");
+        let new_idx = self.gen_code(idx, self.build_stack.len());
+        self.add_code("}");
+        new_idx
+    }
+
+    fn gen_code(&mut self, idx: usize, end_idx: usize) -> usize {
         let mut node_idx = idx;
-        while node_idx < self.build_stack.len() {
+        while node_idx < end_idx {
             node_idx = match self.build_stack.get(node_idx).unwrap() {
                 IRNode::Term(term) => self.gen_term(node_idx).unwrap(),
                 IRNode::Eval(eval) => self.gen_eval(node_idx).unwrap(),
@@ -151,12 +166,18 @@ impl CGenContext {
                 IRNode::EndFuncDef(_) => self.gen_end_func_def(node_idx).unwrap(),
                 // Return
                 IRNode::Return => self.gen_return(node_idx).unwrap(),
+                IRNode::GlobalSection => {
+                    panic!("IRNode::GlobalSection should not be handled as code")
+                }
+                IRNode::EndGlobalSection => {
+                    panic!("IRNode::EndGlobalSection should not be handled as code")
+                }
                 other => {
                     panic!("Unimplemented IRNode: {:?}", other);
                 }
             };
         }
-        self.add_code("}");
+        node_idx
     }
 
     fn gen_term(&mut self, idx: usize) -> Result<usize, CodeGenError> {

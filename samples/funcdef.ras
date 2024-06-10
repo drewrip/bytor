@@ -1,3 +1,7 @@
+function foo(x: int32) -> int32
+  return x + 4;
+end
+
 program test_program
 
   function baz(x: int32, y: int32, z: int32) -> int32
@@ -11,5 +15,6 @@ program test_program
 
   let res = baz(x, y, z);
 
-  return res;
+  let bar = foo(3);
+  return res + bar;
 end

@@ -19,6 +19,9 @@ pub enum IRNode {
     // Function Definition\
     FuncDef(FuncDef, String),
     EndFuncDef(String),
+    // Globals
+    GlobalSection,
+    EndGlobalSection,
     // Extra
     Return,
     Label(Label),
