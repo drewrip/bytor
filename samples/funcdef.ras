@@ -1,0 +1,20 @@
+function foo(x: int32) -> int32
+  return x + 4;
+end
+
+program test_program
+
+  function baz(x: int32, y: int32, z: int32) -> int32
+    let w = x + y + z;
+    return w;
+  end
+
+  let x: int32 = 10;
+  let y: int32 = 12;
+  let z: int32 = 13;
+
+  let res = baz(x, y, z);
+
+  let bar = foo(3);
+  return res + bar;
+end

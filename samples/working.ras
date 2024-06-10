@@ -3,6 +3,7 @@ let x = 3 * (4 + 5);
 function baz(x: int32, y: int32) -> int32
   let z = 4 * (4 / 5);
   let y = 3;
+  return y;
 end
 
 program test_program
