@@ -1,18 +1,8 @@
-use crate::ast::{self, Program};
 use crate::ir::IRNode;
-use crate::semantic;
-use crate::symbol::{new_symbol, Symbol};
+use crate::symbol::{Symbol};
 use anyhow::Result;
 use std::collections::HashMap;
-use std::fs::File;
 use std::io::Write;
-use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::str::FromStr;
-use wasm_encoder::{
-    CodeSection, ExportKind, ExportSection, Function, FunctionSection, Instruction, Module,
-    TypeSection, ValType,
-};
 
 use thiserror::Error;
 
