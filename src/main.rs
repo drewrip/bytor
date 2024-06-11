@@ -78,6 +78,8 @@ fn main() {
         let mut file =
             File::create(ProgramState::IR_OUTPUT_FILENAME).expect("Cannot create IR file");
         write!(&mut file, "{serialized_ir}").expect("Cannot write to IR file");
+    } else {
+        fs::remove_file(ProgramState::IR_OUTPUT_FILENAME).expect("Unable to delete IR output file");
     }
 
     // Generate code
