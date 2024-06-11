@@ -42,9 +42,9 @@ struct Args {
         short = 'e',
         long = "emit",
         value_parser,
-        num_args = 1,
+        num_args = 0..=2,
         value_delimiter = ',',
-        default_value = "ir"
+        default_value = "none",
     )]
     emit: Vec<EmitArgs>,
 }
@@ -57,6 +57,7 @@ enum BackendArgs {
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
 enum EmitArgs {
+    None,
     Ir,
     C,
 }
@@ -73,9 +74,10 @@ fn main() {
     let mut state = semantic::new_state(root);
     state.build().unwrap();
     if save_ir {
+        let serialized_ir = serde_json::to_string(&state.build_stack).expect("Serialization error");
         let mut file =
             File::create(ProgramState::IR_OUTPUT_FILENAME).expect("Cannot create IR file");
-        write!(&mut file, "{:?}", state.build_stack).expect("Cannot write to IR file");
+        write!(&mut file, "{serialized_ir}").expect("Cannot write to IR file");
     }
 
     // Generate code
