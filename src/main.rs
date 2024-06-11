@@ -32,6 +32,10 @@ struct Args {
     /// Backend: options will be C, or WASM
     #[arg(short = 'b', long = "backend", value_enum, default_value_t = BackendArgs::C)]
     backend: BackendArgs,
+
+    // Emit: options will be any or both of ir, or C for dumping intermediate reps to file
+    #[arg(short = 'e', long = "emit", value_parser, num_args = 1, value_delimiter = ',', default_value = "ir")]
+    emit: Vec<EmitArgs>,
 }
 
 #[derive(Clone, Debug, ValueEnum)]
@@ -40,10 +44,17 @@ enum BackendArgs {
     WASM,
 }
 
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum EmitArgs {
+    Ir,
+    C,
+}
+
 lalrpop_mod!(pub rascal_grammar);
 
 fn main() {
     let args = Args::parse();
+    println!("{:?}", args);
     let src_file = fs::read_to_string(args.infile).expect("ERROR: couldn't find source file");
     let root = rascal_grammar::RootParser::new().parse(&src_file).unwrap();
     // Perform semantic checks and type checking
