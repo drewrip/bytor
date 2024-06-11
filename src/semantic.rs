@@ -152,6 +152,8 @@ pub fn new_state(ast: Box<Root>) -> ProgramState {
 }
 
 impl ProgramState {
+    pub const IR_OUTPUT_FILENAME: &'static str = "out.ir";
+
     pub fn slookup(&self, symbol: Symbol) -> Option<&Var> {
         self.stack
             .iter()

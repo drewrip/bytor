@@ -1,4 +1,7 @@
-use std::fs;
+use std::{
+    fs::{self, File},
+    io::Write,
+};
 
 use clap::{Parser, ValueEnum};
 use lalrpop_util::lalrpop_mod;
@@ -13,6 +16,7 @@ pub mod types;
 
 use backends::{c::CGenContext, wasm::WasmGenContext};
 use codegen::CodeGen;
+use semantic::ProgramState;
 
 /// Compiler for the Rascal language
 #[derive(Parser, Debug)]
@@ -34,7 +38,14 @@ struct Args {
     backend: BackendArgs,
 
     // Emit: options will be any or both of ir, or C for dumping intermediate reps to file
-    #[arg(short = 'e', long = "emit", value_parser, num_args = 1, value_delimiter = ',', default_value = "ir")]
+    #[arg(
+        short = 'e',
+        long = "emit",
+        value_parser,
+        num_args = 1,
+        value_delimiter = ',',
+        default_value = "ir"
+    )]
     emit: Vec<EmitArgs>,
 }
 
@@ -54,12 +65,18 @@ lalrpop_mod!(pub rascal_grammar);
 
 fn main() {
     let args = Args::parse();
-    println!("{:?}", args);
+    let save_c = args.emit.iter().any(|x| matches!(x, EmitArgs::C));
+    let save_ir = args.emit.iter().any(|x| matches!(x, EmitArgs::Ir));
     let src_file = fs::read_to_string(args.infile).expect("ERROR: couldn't find source file");
     let root = rascal_grammar::RootParser::new().parse(&src_file).unwrap();
     // Perform semantic checks and type checking
     let mut state = semantic::new_state(root);
     state.build().unwrap();
+    if save_ir {
+        let mut file =
+            File::create(ProgramState::IR_OUTPUT_FILENAME).expect("Cannot create IR file");
+        write!(&mut file, "{:#?}", state.build_stack).expect("Cannot write to IR file");
+    }
 
     // Generate code
     let ctx = codegen::new(state.build_stack, args.outfile, args.skip_validation);
@@ -67,6 +84,9 @@ fn main() {
         BackendArgs::C => CGenContext::from(ctx).gen(),
         BackendArgs::WASM => WasmGenContext::from(ctx).gen(),
     };
+    if !save_c {
+        fs::remove_file(CGenContext::C_OUTPUT_FILENAME).expect("Unable to delete C output file");
+    }
     build_result.expect("Build failed!");
 }
 
