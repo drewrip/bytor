@@ -75,7 +75,7 @@ fn main() {
     if save_ir {
         let mut file =
             File::create(ProgramState::IR_OUTPUT_FILENAME).expect("Cannot create IR file");
-        write!(&mut file, "{:#?}", state.build_stack).expect("Cannot write to IR file");
+        write!(&mut file, "{:?}", state.build_stack).expect("Cannot write to IR file");
     }
 
     // Generate code
