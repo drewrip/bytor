@@ -15,7 +15,7 @@ pub enum IRNode {
     // Expression nodes
     Term(Term),
     Eval(Func),
-    // Function Definition\
+    // Function Definition
     FuncDef(FuncDef, String),
     EndFuncDef(String),
     // Globals
