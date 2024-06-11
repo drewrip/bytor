@@ -23,6 +23,12 @@ Cargo.lock
 # Intermediate C gen code
 *.c
 
+# Intermediate rep code
+*.ir
+
+# outfiles
+*.out
+
 # Finished WASM Code
 *.wasm
 *.wat

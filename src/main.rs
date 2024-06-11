@@ -42,11 +42,9 @@ struct Args {
         short = 'e',
         long = "emit",
         value_parser,
-        num_args = 0..=2,
         value_delimiter = ',',
-        default_value = "none",
     )]
-    emit: Vec<EmitArgs>,
+    emit: Option<Vec<EmitArgs>>,
 }
 
 #[derive(Clone, Debug, ValueEnum)]
@@ -57,7 +55,6 @@ enum BackendArgs {
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
 enum EmitArgs {
-    None,
     Ir,
     C,
 }
@@ -66,8 +63,14 @@ lalrpop_mod!(pub rascal_grammar);
 
 fn main() {
     let args = Args::parse();
-    let save_c = args.emit.iter().any(|x| matches!(x, EmitArgs::C));
-    let save_ir = args.emit.iter().any(|x| matches!(x, EmitArgs::Ir));
+    let save_c: bool;
+    let save_ir: bool;
+    if let Some(emit) = args.emit {
+        save_c = emit.iter().any(|x| matches!(x, EmitArgs::C));
+        save_ir = emit.iter().any(|x| matches!(x, EmitArgs::Ir));
+    } else {
+        (save_c, save_ir) = (false, false);
+    }
     let src_file = fs::read_to_string(args.infile).expect("ERROR: couldn't find source file");
     let root = rascal_grammar::RootParser::new().parse(&src_file).unwrap();
     // Perform semantic checks and type checking
@@ -78,8 +81,6 @@ fn main() {
         let mut file =
             File::create(ProgramState::IR_OUTPUT_FILENAME).expect("Cannot create IR file");
         write!(&mut file, "{serialized_ir}").expect("Cannot write to IR file");
-    } else {
-        fs::remove_file(ProgramState::IR_OUTPUT_FILENAME).expect("Unable to delete IR output file");
     }
 
     // Generate code
