@@ -1,4 +1,7 @@
-use std::fs;
+use std::{
+    fs::{self, File},
+    io::Write,
+};
 
 use clap::{Parser, ValueEnum};
 use lalrpop_util::lalrpop_mod;
@@ -13,6 +16,7 @@ pub mod types;
 
 use backends::{c::CGenContext, wasm::WasmGenContext};
 use codegen::CodeGen;
+use semantic::ProgramState;
 
 /// Compiler for the Rascal language
 #[derive(Parser, Debug)]
@@ -32,6 +36,15 @@ struct Args {
     /// Backend: options will be C, or WASM
     #[arg(short = 'b', long = "backend", value_enum, default_value_t = BackendArgs::C)]
     backend: BackendArgs,
+
+    // Emit: options will be any or both of ir, or C for dumping intermediate reps to file
+    #[arg(
+        short = 'e',
+        long = "emit",
+        value_parser,
+        value_delimiter = ',',
+    )]
+    emit: Option<Vec<EmitArgs>>,
 }
 
 #[derive(Clone, Debug, ValueEnum)]
@@ -40,15 +53,35 @@ enum BackendArgs {
     WASM,
 }
 
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum EmitArgs {
+    Ir,
+    C,
+}
+
 lalrpop_mod!(pub rascal_grammar);
 
 fn main() {
     let args = Args::parse();
+    let save_c: bool;
+    let save_ir: bool;
+    if let Some(emit) = args.emit {
+        save_c = emit.iter().any(|x| matches!(x, EmitArgs::C));
+        save_ir = emit.iter().any(|x| matches!(x, EmitArgs::Ir));
+    } else {
+        (save_c, save_ir) = (false, false);
+    }
     let src_file = fs::read_to_string(args.infile).expect("ERROR: couldn't find source file");
     let root = rascal_grammar::RootParser::new().parse(&src_file).unwrap();
     // Perform semantic checks and type checking
     let mut state = semantic::new_state(root);
     state.build().unwrap();
+    if save_ir {
+        let serialized_ir = serde_json::to_string(&state.build_stack).expect("Serialization error");
+        let mut file =
+            File::create(ProgramState::IR_OUTPUT_FILENAME).expect("Cannot create IR file");
+        write!(&mut file, "{serialized_ir}").expect("Cannot write to IR file");
+    }
 
     // Generate code
     let ctx = codegen::new(state.build_stack, args.outfile, args.skip_validation);
@@ -56,6 +89,9 @@ fn main() {
         BackendArgs::C => CGenContext::from(ctx).gen(),
         BackendArgs::WASM => WasmGenContext::from(ctx).gen(),
     };
+    if !save_c {
+        fs::remove_file(CGenContext::C_OUTPUT_FILENAME).expect("Unable to delete C output file");
+    }
     build_result.expect("Build failed!");
 }
 

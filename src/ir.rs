@@ -1,7 +1,8 @@
 use crate::symbol::{new_symbol, Symbol};
 use crate::types::Type;
+use serde::{Serialize, Deserialize};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum IRNode {
     // Mutate State
     Assign(Assign),
@@ -26,34 +27,34 @@ pub enum IRNode {
     Label(Label),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Label(pub String);
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Assign {
     pub type_t: Type,
     pub symbol: Symbol,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Reassign {
     pub type_t: Type,
     pub symbol: Symbol,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct IfCase {
     pub end_block_label: Label,
     pub end_if_label: Label,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Term {
     pub type_t: Type,
     pub value: Value,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Value {
     Int32(i32),
     Int64(i64),
@@ -65,7 +66,7 @@ pub enum Value {
     Id(String),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Func {
     Add(Signature),
     Sub(Signature),
@@ -80,7 +81,7 @@ pub enum Func {
     Func(Signature),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Signature {
     pub symbol: Symbol,
     pub params_t: Vec<Type>,
@@ -95,7 +96,7 @@ pub fn new_sig(ident: &str, params_t: Vec<Type>, return_t: Type) -> Signature {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FuncDef {
     pub symbol: Symbol,
     pub params_t: Vec<(String, Type)>,

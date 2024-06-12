@@ -85,12 +85,12 @@ impl CodeGen for CGenContext {
 
         let final_source = self.code_buffer.join(" ");
         let mut file =
-            File::create("out.c").map_err(|err| CodeGenError::BinaryWrite(err.to_string()))?;
+            File::create(CGenContext::C_OUTPUT_FILENAME).map_err(|err| CodeGenError::BinaryWrite(err.to_string()))?;
         file.write_all(final_source.as_bytes())
             .map_err(|err| CodeGenError::BinaryWrite(err.to_string()))?;
 
         let compile_cmd = Command::new("gcc")
-            .arg("out.c")
+            .arg(CGenContext::C_OUTPUT_FILENAME)
             .arg("-o")
             .arg(self.outfile.clone())
             .output()
@@ -108,6 +108,8 @@ impl CodeGen for CGenContext {
 }
 
 impl CGenContext {
+    pub const C_OUTPUT_FILENAME: &'static str = "out.c";
+
     fn add_code(&mut self, code: &str) {
         self.code_buffer.push(code.into());
     }
