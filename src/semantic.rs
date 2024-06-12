@@ -850,15 +850,16 @@ impl ProgramState {
             Term::Num(num) => {
                 stack.get_mut(node_idx).unwrap().set_total(0);
                 stack.get_mut(node_idx).unwrap().set_checked();
+                let resolved_type = types::Type::try_from(num.clone()).unwrap();
                 stack
                     .get_mut(node_idx)
                     .unwrap()
-                    .set_type(types::Type::Int32);
+                    .set_type(resolved_type.clone());
                 // Increment progress of parent
                 self.inc_parent(stack, node_idx);
                 self.build_stack.push(IRNode::Term(ir::Term {
-                    type_t: types::Type::Int32,
-                    value: ir::Value::Int32(num),
+                    type_t: resolved_type,
+                    value: ir::Value::try_from(num).unwrap(),
                 }));
             }
             Term::Bool(bool_value) => {

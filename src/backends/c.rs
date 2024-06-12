@@ -1,11 +1,10 @@
 use crate::codegen::{CodeGen, CodeGenContext, CodeGenError};
 use crate::ir::{self, FuncDef, IRNode};
 use crate::types::Type;
-use anyhow::{Result};
+use anyhow::Result;
 use std::fs::File;
 use std::io::Write;
 use std::process::Command;
-
 
 macro_rules! matches_variant {
     ($val:expr, $var:path) => {
@@ -37,8 +36,21 @@ pub fn translate_value(value: ir::Value) -> String {
         ir::Value::Int64(num) => format!("INT64_C({})", num),
         ir::Value::UInt32(num) => format!("UINT32_C({})", num),
         ir::Value::UInt64(num) => format!("UINT64_C({})", num),
-        ir::Value::Float32(num) => format!("{}F", num),
-        ir::Value::Float64(num) => format!("{}", num),
+        ir::Value::Float32(num) => {
+            let mut rep = format!("{}", &f32::to_string(&num));
+            if !rep.contains(".") {
+                rep.push_str(".0");
+            }
+            rep.push_str("F");
+            rep
+        }
+        ir::Value::Float64(num) => {
+            let mut rep = format!("{}", &f64::to_string(&num));
+            if !rep.contains(".") {
+                rep.push_str(".0");
+            }
+            rep
+        }
         ir::Value::Bool(b) => {
             if b {
                 format!("1")
@@ -84,8 +96,8 @@ impl CodeGen for CGenContext {
         self.gen_program(start);
 
         let final_source = self.code_buffer.join(" ");
-        let mut file =
-            File::create(CGenContext::C_OUTPUT_FILENAME).map_err(|err| CodeGenError::BinaryWrite(err.to_string()))?;
+        let mut file = File::create(CGenContext::C_OUTPUT_FILENAME)
+            .map_err(|err| CodeGenError::BinaryWrite(err.to_string()))?;
         file.write_all(final_source.as_bytes())
             .map_err(|err| CodeGenError::BinaryWrite(err.to_string()))?;
 

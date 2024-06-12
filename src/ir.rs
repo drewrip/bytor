@@ -1,6 +1,6 @@
 use crate::symbol::{new_symbol, Symbol};
 use crate::types::Type;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum IRNode {

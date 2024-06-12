@@ -1,6 +1,14 @@
-use serde::{Deserialize, Serialize};
+use crate::ir;
 use crate::symbol::{Symbol, Var};
 use crate::types;
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum ASTError {
+    #[error("Conversion from value in the AST to IR failed: {0}")]
+    NoRep(String),
+}
 
 pub type Block = Vec<Box<Stmt>>;
 
@@ -64,7 +72,7 @@ pub enum Expr {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Term {
     Id(String),
-    Num(i32),
+    Num(Num),
     Bool(bool),
     Expr(Box<Expr>),
 }
@@ -114,4 +122,44 @@ pub struct Func {
     pub with: With,
     pub ident: String,
     pub block: Block,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Num {
+    Int32(i32),
+    Int64(i64),
+    UInt32(u32),
+    UInt64(u64),
+    Float32(f32),
+    Float64(f64),
+}
+
+impl TryFrom<Num> for ir::Value {
+    type Error = ASTError;
+    fn try_from(num: Num) -> Result<Self, Self::Error> {
+        match num {
+            Num::Int32(n) => Ok(ir::Value::Int32(n)),
+            Num::Int64(n) => Ok(ir::Value::Int64(n)),
+            Num::UInt32(n) => Ok(ir::Value::UInt32(n)),
+            Num::UInt64(n) => Ok(ir::Value::UInt64(n)),
+            Num::Float32(n) => Ok(ir::Value::Float32(n)),
+            Num::Float64(n) => Ok(ir::Value::Float64(n)),
+            other => Err(ASTError::NoRep(String::from("Unknown AST num"))),
+        }
+    }
+}
+
+impl TryFrom<Num> for types::Type {
+    type Error = ASTError;
+    fn try_from(num: Num) -> Result<Self, Self::Error> {
+        match num {
+            Num::Int32(n) => Ok(types::Type::Int32),
+            Num::Int64(n) => Ok(types::Type::Int64),
+            Num::UInt32(n) => Ok(types::Type::UInt32),
+            Num::UInt64(n) => Ok(types::Type::UInt64),
+            Num::Float32(n) => Ok(types::Type::Float32),
+            Num::Float64(n) => Ok(types::Type::Float64),
+            other => Err(ASTError::NoRep(String::from("Unknown AST num"))),
+        }
+    }
 }
