@@ -1,0 +1,14 @@
+function foo(x: float32) -> float32
+    return 2.0 * x;
+end
+
+program test_program
+    let x = 5.0 / 2.0;
+    let y = 0;
+    if x > 2.4 then
+        y = 1;
+    else then
+        y = 2;
+    end
+    return y;
+end
