@@ -1,6 +1,6 @@
 use std::{
     fs::{self, File},
-    io::Write,
+    io::Write, path::Path,
 };
 
 use clap::{Parser, ValueEnum};
@@ -71,20 +71,26 @@ fn main() {
     } else {
         (save_c, save_ir) = (false, false);
     }
-    let src_file = fs::read_to_string(args.infile).expect("ERROR: couldn't find source file");
-    let root = rascal_grammar::RootParser::new().parse(&src_file).unwrap();
-    // Perform semantic checks and type checking
-    let mut state = semantic::new_state(root);
-    state.build().unwrap();
-    if save_ir {
-        let serialized_ir = serde_json::to_string(&state.build_stack).expect("Serialization error");
-        let mut file =
-            File::create(ProgramState::IR_OUTPUT_FILENAME).expect("Cannot create IR file");
-        write!(&mut file, "{serialized_ir}").expect("Cannot write to IR file");
-    }
-
+    let src_file = fs::read_to_string(&args.infile).expect("ERROR: couldn't find source file");
+    let build_stack = if Path::new(&args.infile).extension().expect("Problem with filename") == "ir" {
+        // maybe we should make input error an error enum type
+        serde_json::from_str(&src_file).expect("Problem with IR file")
+    } else {
+        // maybe we should make input error an error enum type
+        let root = rascal_grammar::RootParser::new().parse(&src_file).expect("Problem with ras file");
+        // Perform semantic checks and type checking
+        let mut state = semantic::new_state(root);
+        state.build().unwrap();
+        if save_ir {
+            let serialized_ir = serde_json::to_string(&state.build_stack).expect("Serialization error");
+            let mut file =
+                File::create(ProgramState::IR_OUTPUT_FILENAME).expect("Cannot create IR file");
+            write!(&mut file, "{serialized_ir}").expect("Cannot write to IR file");
+        }
+        state.build_stack
+    };
     // Generate code
-    let ctx = codegen::new(state.build_stack, args.outfile, args.skip_validation);
+    let ctx = codegen::new(build_stack, args.outfile, args.skip_validation);
     let build_result = match args.backend {
         BackendArgs::C => CGenContext::from(ctx).gen(),
         BackendArgs::WASM => WasmGenContext::from(ctx).gen(),
