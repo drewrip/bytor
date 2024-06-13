@@ -63,11 +63,13 @@ pub enum Value {
     Float32(f32),
     Float64(f64),
     Bool(bool),
+    String(String),
     Id(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Func {
+    // Primitive binary
     Add(Signature),
     Sub(Signature),
     Mult(Signature),
@@ -78,6 +80,10 @@ pub enum Func {
     Geq(Signature),
     Eq(Signature),
     Neq(Signature),
+    // Primitive unary
+    Not(Signature),
+    Neg(Signature),
+    // User Defined functions
     Func(Signature),
 }
 

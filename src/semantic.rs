@@ -728,6 +728,12 @@ impl ProgramState {
             Expr::GreaterThan(lhs, rhs) => {
                 self.binary_op(stack, node_idx, progress, expr.clone(), lhs, rhs);
             }
+            Expr::Not(u) => {
+                self.unary_op(stack, node_idx, progress, expr.clone(), u);
+            }
+            Expr::Neg(u) => {
+                self.unary_op(stack, node_idx, progress, expr.clone(), u);
+            }
             Expr::Term(term) => {
                 match progress {
                     0 => {
@@ -873,6 +879,20 @@ impl ProgramState {
                     value: ir::Value::Bool(bool_value),
                 }));
             }
+            Term::String(str_value) => {
+                stack.get_mut(node_idx).unwrap().set_total(0);
+                stack.get_mut(node_idx).unwrap().set_checked();
+                stack
+                    .get_mut(node_idx)
+                    .unwrap()
+                    .set_type(types::Type::String);
+                // Increment progress of parent
+                self.inc_parent(stack, node_idx);
+                self.build_stack.push(IRNode::Term(ir::Term {
+                    type_t: types::Type::String,
+                    value: ir::Value::String(str_value),
+                }));
+            }
             Term::Expr(expr) => {
                 match progress {
                     0 => {
@@ -1000,6 +1020,51 @@ impl ProgramState {
             other => panic!(
                 "error: progress={} doesn't match any possible for func",
                 other
+            ),
+        }
+        Ok(())
+    }
+    fn unary_op(
+        &mut self,
+        stack: &mut Vec<SemNode>,
+        node_idx: usize,
+        progress: usize,
+        operator: Expr,
+        u: Box<Expr>,
+    ) -> Result<()> {
+        match progress {
+            0 => {
+                stack.get_mut(node_idx).unwrap().set_total(1);
+                stack.push(new_sem_node(
+                    Node::ExprNode(u),
+                    types::Type::Unknown,
+                    0,
+                    false,
+                    Some(node_idx),
+                ));
+            }
+            1 => {
+                // Both sub expressions checked!
+                let oper1 = stack.get(node_idx + 1).unwrap().get_type();
+                stack.get_mut(node_idx).unwrap().set_checked();
+                stack.get_mut(node_idx).unwrap().set_type(oper1.clone());
+                // Increment progress of parent
+                self.inc_parent(stack, node_idx);
+                // Resolve the signature of the function that should be added in the IR
+                let resolved_func = match operator.clone() {
+                    Expr::Not(u) => {
+                        ir::Func::Not(ir::new_sig("Not", vec![oper1.clone()], oper1.clone()))
+                    }
+                    Expr::Neg(u) => {
+                        ir::Func::Neg(ir::new_sig("Neg", vec![oper1.clone()], oper1.clone()))
+                    }
+                    _ => panic!("Not sure how to represent {:?} in IR!", operator),
+                };
+                self.build_stack.push(IRNode::Eval(resolved_func));
+            }
+            other => panic!(
+                "error: progress={} doesn't match any possible for {:?}",
+                other, operator
             ),
         }
         Ok(())

@@ -18,6 +18,7 @@ pub enum Type {
     Unknown,
     Nil,
 }
+
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct FunctionType {
     pub return_t: Vec<Type>,

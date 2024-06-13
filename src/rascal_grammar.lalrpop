@@ -123,8 +123,10 @@ pub Func: Box<Func> = {
 
 pub Expr: Box<Expr> = {
     #[precedence(level="0")] // Highest precedence
-    <t:Term> => Box::new(Expr::Term(t)),
     <id:Id> "(" <args:Args> ")" => Box::new(Expr::Call(Symbol{ident: id}, Box::new(args))),
+    <t:Term> => Box::new(Expr::Term(t)),
+    "!" <u:Expr> => Box::new(Expr::Not(u)),
+    "-" <u:Expr> => Box::new(Expr::Neg(u)),
     #[precedence(level="1")] #[assoc(side="left")]
     <l:Expr> "*" <r:Expr> => Box::new(Expr::Mult(l, r)),
     <l:Expr> "/" <r:Expr> => Box::new(Expr::Div(l, r)),
@@ -144,6 +146,7 @@ pub Term: Box<Term> = {
     <id:Id> => Box::new(Term::Id(id)),
     <n:Num> => Box::new(Term::Num(n)),
     <b:Bool> => Box::new(Term::Bool(b)),
+    <s:StringType> => Box::new(Term::String(s)),
     "(" <t:Expr> ")" => Box::new(Term::Expr(t)),
 };
 
@@ -171,6 +174,8 @@ pub Num: Num = {
 
 Id: String = r"([a-zA-Z_])([\w\d_])*" => String::from(<>);
 
+StringType: String = r#""(?:\\.|[^"\\])*""# => String::from(<>);
+
 pub AssignOp: AssignOp = {
     "=" => AssignOp::Assign,
     "+=" => AssignOp::AddAssign,
@@ -187,5 +192,6 @@ pub Type: Type = {
     "float64" => Type::Float64,
     "float32" => Type::Float32,
     "bool" => Type::Bool,
+    "string" => Type::String,
     "Nil" => Type::Nil,
 }
