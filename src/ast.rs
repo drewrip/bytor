@@ -66,6 +66,9 @@ pub enum Expr {
     Geq(Box<Expr>, Box<Expr>),
     LessThan(Box<Expr>, Box<Expr>),
     GreaterThan(Box<Expr>, Box<Expr>),
+    // Unary Operators
+    Not(Box<Expr>),
+    Neg(Box<Expr>),
     Call(Symbol, Box<Args>),
 }
 
@@ -74,6 +77,7 @@ pub enum Term {
     Id(String),
     Num(Num),
     Bool(bool),
+    String(String),
     Expr(Box<Expr>),
 }
 

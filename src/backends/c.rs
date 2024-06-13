@@ -58,6 +58,7 @@ pub fn translate_value(value: ir::Value) -> String {
                 format!("0")
             }
         }
+        ir::Value::String(s) => format!("{}", s),
         ir::Value::Id(ident) => format!("{}", ident),
         other => panic!("No value translation for: {:?}", other),
     }
@@ -271,6 +272,12 @@ impl CGenContext {
                         }
                         ir::Func::Neq(_) => {
                             format!("{} != {}", stack.pop().unwrap(), stack.pop().unwrap())
+                        }
+                        ir::Func::Not(_) => {
+                            format!("!{}", stack.pop().unwrap())
+                        }
+                        ir::Func::Neg(_) => {
+                            format!("-{}", stack.pop().unwrap())
                         }
                         ir::Func::Func(sig) => {
                             let mut call: String = sig.symbol.ident.clone();

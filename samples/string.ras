@@ -1,0 +1,4 @@
+program test_program
+  let x = "this is a string!";
+  return 0;
+end
