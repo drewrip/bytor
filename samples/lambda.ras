@@ -1,0 +1,9 @@
+function foo(x: int32) -> int32
+	return x + 5;
+end
+
+program test_funcs
+	let f = foo;
+	let res = f(3);
+	return res;
+end

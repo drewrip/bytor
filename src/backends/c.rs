@@ -1,7 +1,8 @@
 use crate::codegen::{CodeGen, CodeGenContext, CodeGenError};
 use crate::ir::{self, FuncDef, IRNode};
-use crate::types::Type;
+use crate::types::{self, Type};
 use anyhow::Result;
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
 use std::process::Command;
@@ -13,21 +14,6 @@ macro_rules! matches_variant {
             _ => false,
         }
     };
-}
-
-pub fn translate_type(type_t: Type) -> String {
-    match type_t {
-        Type::Int32 => "int32_t",
-        Type::Int64 => "int64_t",
-        Type::UInt32 => "uint32_t",
-        Type::UInt64 => "uint64_t",
-        Type::Float32 => "float",
-        Type::Float64 => "double",
-        Type::Bool => "int32_t",
-        Type::String => "char*",
-        other => panic!("unknown type: {:?}", other),
-    }
-    .into()
 }
 
 pub fn translate_value(value: ir::Value) -> String {
@@ -77,6 +63,9 @@ pub struct CGenContext {
     outfile: String,
     skip_validation: bool,
     code_buffer: Vec<String>,
+    global_idx: usize,
+    type_counter: usize,
+    type_map: HashMap<types::Type, String>,
 }
 
 impl From<CodeGenContext> for CGenContext {
@@ -86,6 +75,9 @@ impl From<CodeGenContext> for CGenContext {
             outfile: ctx.outfile,
             skip_validation: ctx.skip_validation,
             code_buffer: vec![],
+            global_idx: 0,
+            type_counter: 0,
+            type_map: HashMap::new(),
         }
     }
 }
@@ -93,6 +85,7 @@ impl From<CodeGenContext> for CGenContext {
 impl CodeGen for CGenContext {
     fn gen(&mut self) -> Result<(), CodeGenError> {
         self.gen_includes();
+        self.save_global_idx();
         let start = self.gen_globals();
         self.gen_program(start);
 
@@ -125,6 +118,60 @@ impl CGenContext {
 
     fn add_code(&mut self, code: &str) {
         self.code_buffer.push(code.into());
+    }
+
+    fn add_global_code(&mut self, code: &str) {
+        self.code_buffer.insert(self.global_idx, code.into());
+        self.global_idx += 1;
+    }
+
+    fn save_global_idx(&mut self) {
+        self.global_idx = self.code_buffer.len();
+    }
+
+    fn get_new_type_id(&mut self) -> usize {
+        let new_type = self.type_counter;
+        self.type_counter += 1;
+        new_type
+    }
+
+    fn translate_type(&mut self, type_t: Type) -> String {
+        match type_t.clone() {
+            Type::Int32 => "int32_t".into(),
+            Type::Int64 => "int64_t".into(),
+            Type::UInt32 => "uint32_t".into(),
+            Type::UInt64 => "uint64_t".into(),
+            Type::Float32 => "float".into(),
+            Type::Float64 => "double".into(),
+            Type::Bool => "int32_t".into(),
+            Type::String => "char*".into(),
+            Type::Function(func) => match self.type_map.get(&type_t.clone()) {
+                Some(val) => val.to_string(),
+                None => {
+                    let typedef_name = format!("_func_type_{}", self.get_new_type_id());
+                    self.type_map.insert(type_t.clone(), typedef_name.clone());
+                    let param_types: Vec<String> = func
+                        .params_t
+                        .iter()
+                        .map(|t| self.translate_type(t.clone()))
+                        .collect();
+                    let return_type: Vec<String> = func
+                        .return_t
+                        .iter()
+                        .map(|t| self.translate_type(t.clone()))
+                        .collect();
+                    let joined_params = param_types.join(",");
+                    self.add_global_code(&format!(
+                        "typedef {} (*{})({});",
+                        return_type.first().unwrap(),
+                        typedef_name.clone(),
+                        joined_params
+                    ));
+                    typedef_name
+                }
+            },
+            other => panic!("unknown type: {:?}", other),
+        }
     }
 
     fn gen_includes(&mut self) -> Result<(), CodeGenError> {
@@ -206,8 +253,11 @@ impl CGenContext {
     }
 
     fn gen_assign(&mut self, idx: usize, assign: ir::Assign) -> Result<usize, CodeGenError> {
-        if !matches_variant!(assign.type_t, Type::Function) {
-            self.add_code(&translate_type(assign.type_t));
+        if !(matches_variant!(assign.type_t, Type::Function)
+            && matches_variant!(self.build_stack.get(idx - 1).unwrap(), IRNode::EndFuncDef))
+        {
+            let assignment_type = &self.translate_type(assign.type_t);
+            self.add_code(assignment_type);
             self.add_code(&assign.symbol.ident.clone());
             self.add_code("=");
             self.gen_expr(idx - 1);
@@ -340,12 +390,14 @@ impl CGenContext {
     }
 
     fn gen_func_def(&mut self, idx: usize, def: FuncDef) -> Result<usize, CodeGenError> {
-        self.add_code(&translate_type(def.return_t));
+        let return_type = &self.translate_type(def.return_t);
+        self.add_code(return_type);
         self.add_code(&def.symbol.ident);
         self.add_code("(");
         let num_params = def.params_t.clone().len();
         for (n, param) in def.params_t.into_iter().enumerate() {
-            self.add_code(&translate_type(param.1));
+            let param_type = &self.translate_type(param.1);
+            self.add_code(param_type);
             self.add_code(&param.0);
             if n != num_params - 1 {
                 self.add_code(",");
