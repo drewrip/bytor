@@ -21,9 +21,8 @@ pub enum Type {
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct FunctionType {
-    pub return_t: Vec<Type>,
     pub params_t: Vec<Type>,
-    pub with_t: Vec<WithType>,
+    pub return_t: Box<Type>,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]

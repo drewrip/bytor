@@ -155,15 +155,11 @@ impl CGenContext {
                         .iter()
                         .map(|t| self.translate_type(t.clone()))
                         .collect();
-                    let return_type: Vec<String> = func
-                        .return_t
-                        .iter()
-                        .map(|t| self.translate_type(t.clone()))
-                        .collect();
+                    let return_type: String = self.translate_type(*func.return_t.clone());
                     let joined_params = param_types.join(",");
                     self.add_global_code(&format!(
                         "typedef {} (*{})({});",
-                        return_type.first().unwrap(),
+                        return_type,
                         typedef_name.clone(),
                         joined_params
                     ));

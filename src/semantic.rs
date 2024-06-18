@@ -383,6 +383,10 @@ impl ProgramState {
                     }
                     1 => {
                         // Both sub expressions checked!
+                        println!("node_idx = {}", node_idx);
+                        for (n, s) in stack.iter().enumerate() {
+                            println!("{}: {:?}\n", n, s);
+                        }
                         let oper1 = stack.get(node_idx + 3).unwrap().get_type();
                         // Don't increase the parent, because there isn't one right now
                         let var_node = stack.get(node_idx + 2).unwrap();
@@ -595,12 +599,6 @@ impl ProgramState {
                         resolved_types.push(stack.pop().unwrap().get_type());
                     }
                     for (arg_type, param_type) in resolved_types.iter().rev().zip(param_types) {
-                        println!(
-                            "{}: {:?} == {:?}",
-                            symbol.ident.clone(),
-                            arg_type,
-                            param_type
-                        );
                         if param_type != *arg_type {
                             panic!(
                                 "argument to function {}(...) is incorrect type",
@@ -608,8 +606,8 @@ impl ProgramState {
                             )
                         }
                     }
-                    let return_t = func_type.return_t.first().unwrap().clone();
-                    stack.get_mut(node_idx).unwrap().set_type(return_t);
+                    let return_t = func_type.return_t.clone();
+                    stack.get_mut(node_idx).unwrap().set_type(*return_t);
                     stack.get_mut(node_idx).unwrap().set_checked();
                     self.rebase_stack(stack, node_idx);
                     self.inc_parent(stack, node_idx);
@@ -626,13 +624,12 @@ impl ProgramState {
                     0 => {
                         stack.get_mut(node_idx).unwrap().set_total(1);
                         let params = func.params.iter().map(|p| p.type_t.clone()).collect();
-                        let return_t = func.ret_t.clone();
+                        let return_t = func.return_t.clone();
                         let symbol = new_symbol(func.ident.clone());
                         let block = func.block.clone();
                         let function_type = types::Type::Function(types::FunctionType {
                             params_t: params,
-                            return_t: vec![return_t],
-                            with_t: vec![],
+                            return_t: Box::new(return_t),
                         });
                         self.sinsert(
                             new_symbol(func.ident.clone()),
@@ -794,12 +791,6 @@ impl ProgramState {
                     }
                     let mut resolved_param_types = vec![];
                     for (arg_type, param_type) in resolved_types.iter().rev().zip(param_types) {
-                        println!(
-                            "{}: {:?} == {:?}",
-                            symbol.ident.clone(),
-                            arg_type,
-                            param_type
-                        );
                         if param_type != *arg_type {
                             panic!(
                                 "argument to function {}(...) is incorrect type",
@@ -808,15 +799,15 @@ impl ProgramState {
                         }
                         resolved_param_types.push(arg_type.clone());
                     }
-                    let return_t = func_type.return_t.first().unwrap().clone();
-                    stack.get_mut(node_idx).unwrap().set_type(return_t.clone());
+                    let return_t = func_type.return_t.clone();
+                    stack.get_mut(node_idx).unwrap().set_type(*return_t.clone());
                     stack.get_mut(node_idx).unwrap().set_checked();
                     self.inc_parent(stack, node_idx);
                     stack.push(new_annotation(Some(AnnotationNode::Eval(ir::Func::Func(
                         Signature {
                             symbol,
                             params_t: resolved_param_types,
-                            return_t,
+                            return_t: *return_t,
                         },
                     )))));
                 } else {
@@ -824,6 +815,55 @@ impl ProgramState {
                         "error: progress={} doesn't match any possible for Expr::Call",
                         progress
                     );
+                }
+            }
+            Expr::LambdaFunc(func) => {
+                match progress {
+                    0 => {
+                        stack.get_mut(node_idx).unwrap().set_total(1);
+                        let params = func.params.iter().map(|p| p.type_t.clone()).collect();
+                        let return_t = func.return_t.clone();
+                        let temp_func_id = self.get_new_scope();
+                        let temp_func_name = format!("@_anon_func_{}", temp_func_id);
+                        let symbol = new_symbol(temp_func_name.clone());
+                        let block = func.block.clone();
+                        let function_type = types::Type::Function(types::FunctionType {
+                            params_t: params,
+                            return_t: Box::new(return_t),
+                        });
+                        self.sinsert(
+                            new_symbol(temp_func_name.clone()),
+                            new_var(
+                                function_type.clone(),
+                                stack.get(node_idx).unwrap().ast_node.clone(),
+                            ),
+                        );
+                        let temp_func = Func {
+                            ident: temp_func_name.clone(),
+                            params: func.params,
+                            return_t: func.return_t,
+                            block: func.block,
+                        };
+                        stack.push(new_sem_node(
+                            Node::FuncNode(Box::new(temp_func)),
+                            function_type,
+                            0,
+                            false,
+                            Some(node_idx),
+                        ));
+                    }
+                    1 => {
+                        // Both sub expressions checked!
+                        let func_type = stack.get(node_idx + 1).unwrap().get_type();
+                        stack.get_mut(node_idx).unwrap().set_checked();
+                        stack.get_mut(node_idx).unwrap().set_type(func_type);
+                        self.inc_parent(stack, node_idx);
+                        stack.pop();
+                    }
+                    other => panic!(
+                        "error: progress={} doesn't match any possible for Expr::LambdaFunc",
+                        other
+                    ),
                 }
             }
         }
@@ -993,7 +1033,7 @@ impl ProgramState {
                     ir::FuncDef {
                         symbol: new_symbol(func.ident.clone()),
                         params_t,
-                        return_t: func.ret_t,
+                        return_t: func.return_t,
                     },
                     func_label,
                 ))));
@@ -1012,8 +1052,7 @@ impl ProgramState {
                             .into_iter()
                             .map(|p| (*p).clone().type_t)
                             .collect(),
-                        return_t: vec![func.ret_t],
-                        with_t: vec![],
+                        return_t: Box::new(func.return_t),
                     }),
                 }));
             }

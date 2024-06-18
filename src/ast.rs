@@ -70,6 +70,7 @@ pub enum Expr {
     Not(Box<Expr>),
     Neg(Box<Expr>),
     Call(Symbol, Box<Args>),
+    LambdaFunc(LambdaFunc),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -121,10 +122,16 @@ pub struct Param {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Func {
-    pub ret_t: types::Type,
+    pub return_t: types::Type,
     pub params: Params,
-    pub with: With,
     pub ident: String,
+    pub block: Block,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LambdaFunc {
+    pub return_t: types::Type,
+    pub params: Params,
     pub block: Block,
 }
 

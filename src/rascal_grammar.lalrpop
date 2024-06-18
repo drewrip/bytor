@@ -113,33 +113,39 @@ pub Func: Box<Func> = {
             None => Type::Nil,
             Some(t) => t,
         };
-        let with = match w {
-            None => vec![],
-            Some(w) => w,
-        };
-        Box::new(Func{ret_t: ret, params: p, with: with, ident: id, block: b})
+        Box::new(Func{return_t: ret, params: p, ident: id, block: b})
+    },
+};
+
+pub LambdaFunc: LambdaFunc = {
+    "(" <p:Params> ")" "->" "|" <e:Expr> "|" => {
+        let ret = Type::Unknown;
+	let ret_expr = Box::new(Stmt::Return(e));
+        LambdaFunc{return_t: ret, params: p, block: vec![ret_expr]}
     },
 };
 
 pub Expr: Box<Expr> = {
     #[precedence(level="0")] // Highest precedence
+    <l:LambdaFunc> => Box::new(Expr::LambdaFunc(l)),
+    #[precedence(level="1")] #[assoc(side="left")]
     <id:Id> "(" <args:Args> ")" => Box::new(Expr::Call(Symbol{ident: id}, Box::new(args))),
     <t:Term> => Box::new(Expr::Term(t)),
     "!" <u:Expr> => Box::new(Expr::Not(u)),
     "-" <u:Expr> => Box::new(Expr::Neg(u)),
-    #[precedence(level="1")] #[assoc(side="left")]
-    <l:Expr> "*" <r:Expr> => Box::new(Expr::Mult(l, r)),
-    <l:Expr> "/" <r:Expr> => Box::new(Expr::Div(l, r)),
     #[precedence(level="2")] #[assoc(side="left")]
-    <l:Expr> "+" <r:Expr> => Box::new(Expr::Add(l, r)),
-    <l:Expr> "-" <r:Expr> => Box::new(Expr::Sub(l, r)),
-    #[precedence(level="3")] #[assoc(side="left")]
     <l:Expr> "==" <r:Expr> => Box::new(Expr::Eq(l, r)),
     <l:Expr> "!=" <r:Expr> => Box::new(Expr::Neq(l, r)),
     <l:Expr> "<=" <r:Expr> => Box::new(Expr::Leq(l, r)),
     <l:Expr> ">=" <r:Expr> => Box::new(Expr::Geq(l, r)),
     <l:Expr> "<" <r:Expr> => Box::new(Expr::LessThan(l, r)),
     <l:Expr> ">" <r:Expr> => Box::new(Expr::GreaterThan(l, r)),
+    #[precedence(level="3")] #[assoc(side="left")]
+    <l:Expr> "*" <r:Expr> => Box::new(Expr::Mult(l, r)),
+    <l:Expr> "/" <r:Expr> => Box::new(Expr::Div(l, r)),
+    #[precedence(level="4")] #[assoc(side="left")]
+    <l:Expr> "+" <r:Expr> => Box::new(Expr::Add(l, r)),
+    <l:Expr> "-" <r:Expr> => Box::new(Expr::Sub(l, r)),
 };
 
 pub Term: Box<Term> = {
@@ -193,5 +199,8 @@ pub Type: Type = {
     "float32" => Type::Float32,
     "bool" => Type::Bool,
     "string" => Type::String,
+    "(" <args:ArgTypes> ")" "->" <ret:Type> => Type::Function(FunctionType{params_t: args, return_t: Box::new(ret)}),
     "Nil" => Type::Nil,
 }
+
+pub ArgTypes: Vec<Type> = Comma<Type>;
