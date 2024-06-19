@@ -1,4 +1,6 @@
+use crate::ast::Expr;
 use crate::semantic::SymbolStack;
+use crate::types::Type;
 
 use thiserror::Error;
 
@@ -8,14 +10,14 @@ pub enum TypeError {
     IdentNotFound(String),
 }
 
-pub fn infer(gamma: SymbolStack) -> Result<(), TypeError> {
-    Ok(())
+pub fn infer(gamma: SymbolStack, expr: Expr) -> Result<Type, TypeError> {
+    Ok(Type::Nil)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::Node;
+    use crate::ast::{Expr, Node, Num, Term};
     use crate::semantic::SymbolTable;
     use crate::symbol::{new_symbol, new_var};
     use crate::types::Type;
@@ -27,7 +29,11 @@ mod tests {
                 .into_iter()
                 .collect(),
         }];
-        let res = infer(ctx);
+        let expr: Expr = Expr::Add(
+            Box::new(Expr::Term(Box::new(Term::Id("x".into())))),
+            Box::new(Expr::Term(Box::new(Term::Num(Num::Int32(5))))),
+        );
+        let res = infer(ctx, expr);
         assert!(res.is_ok());
     }
 }
