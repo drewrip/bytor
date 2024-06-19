@@ -1,4 +1,4 @@
-function foo(x: int32, y: int64) -> int32
+fun foo(x: int32, y: int64) -> int32
     let z = x;
     let w = y;
 end

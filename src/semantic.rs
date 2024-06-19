@@ -383,10 +383,6 @@ impl ProgramState {
                     }
                     1 => {
                         // Both sub expressions checked!
-                        println!("node_idx = {}", node_idx);
-                        for (n, s) in stack.iter().enumerate() {
-                            println!("{}: {:?}\n", n, s);
-                        }
                         let oper1 = stack.get(node_idx + 3).unwrap().get_type();
                         // Don't increase the parent, because there isn't one right now
                         let var_node = stack.get(node_idx + 2).unwrap();

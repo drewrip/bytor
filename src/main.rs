@@ -38,12 +38,7 @@ struct Args {
     backend: BackendArgs,
 
     // Emit: options will be any or both of ir, or C for dumping intermediate reps to file
-    #[arg(
-        short = 'e',
-        long = "emit",
-        value_parser,
-        value_delimiter = ',',
-    )]
+    #[arg(short = 'e', long = "emit", value_parser, value_delimiter = ',')]
     emit: Option<Vec<EmitArgs>>,
 }
 
@@ -59,7 +54,7 @@ enum EmitArgs {
     C,
 }
 
-lalrpop_mod!(pub rascal_grammar);
+lalrpop_mod!(pub rascal);
 
 fn main() {
     let args = Args::parse();
@@ -72,7 +67,7 @@ fn main() {
         (save_c, save_ir) = (false, false);
     }
     let src_file = fs::read_to_string(args.infile).expect("ERROR: couldn't find source file");
-    let root = rascal_grammar::RootParser::new().parse(&src_file).unwrap();
+    let root = rascal::RootParser::new().parse(&src_file).unwrap();
     // Perform semantic checks and type checking
     let mut state = semantic::new_state(root);
     state.build().unwrap();
@@ -103,7 +98,7 @@ fn root_parser_passing1() {
         let y = 10;
     end
     "#;
-    assert!(rascal_grammar::ProgramParser::new().parse(source).is_ok());
+    assert!(rascal::ProgramParser::new().parse(source).is_ok());
 }
 
 #[test]
@@ -113,7 +108,7 @@ fn root_parser_failing1() {
         1 + 2;
     end
     "#;
-    assert!(rascal_grammar::ProgramParser::new().parse(source).is_err());
+    assert!(rascal::ProgramParser::new().parse(source).is_err());
 }
 
 #[test]
@@ -123,7 +118,7 @@ fn type_checking_passing1() {
         let x: int32 = 431;
     end
     "#;
-    let root = rascal_grammar::RootParser::new().parse(source).unwrap();
+    let root = rascal::RootParser::new().parse(source).unwrap();
     let mut state = semantic::new_state(root);
     // Perform semantic checks and type checking
     let build_res = state.build();
@@ -148,7 +143,7 @@ fn type_checking_passing2() {
         let test = baz(x, x, x);
     end
     "#;
-    let root = rascal_grammar::RootParser::new().parse(source).unwrap();
+    let root = rascal::RootParser::new().parse(source).unwrap();
     let mut state = semantic::new_state(root);
     // Perform semantic checks and type checking
     let build_res = state.build();
@@ -169,7 +164,7 @@ fn type_checking_func_failing1() {
         let test = foo(x, x);
     end
     "#;
-    let root = rascal_grammar::RootParser::new().parse(source).unwrap();
+    let root = rascal::RootParser::new().parse(source).unwrap();
     let mut state = semantic::new_state(root);
     // Perform semantic checks and type checking
     let build_res = state.build();
@@ -186,7 +181,7 @@ fn type_checking_ifs_passing1() {
             end
         end
     "#;
-    let root = rascal_grammar::RootParser::new().parse(source).unwrap();
+    let root = rascal::RootParser::new().parse(source).unwrap();
     let mut state = semantic::new_state(root);
     // Perform semantic checks and type checking
     let build_res = state.build();
@@ -212,7 +207,7 @@ fn type_checking_ifs_passing2() {
             end
         end
     "#;
-    let root = rascal_grammar::RootParser::new().parse(source).unwrap();
+    let root = rascal::RootParser::new().parse(source).unwrap();
     let mut state = semantic::new_state(root);
     // Perform semantic checks and type checking
     let build_res = state.build();

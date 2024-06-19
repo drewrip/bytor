@@ -107,8 +107,20 @@ pub Param: Box<Param> = {
     <id:Id> ":" <t:Type> => Box::new(Param{type_t: t, ident: id}),
 };
 
+pub OptionalParams: Params = Comma<OptionalParam>;
+
+pub OptionalParam: Box<Param> = {
+    <id:Id> <t:(":" <Type>)?> => {
+        let optional_type = match t {
+            Some(found_type) => found_type,
+            None => Type::Unknown,
+        };
+        Box::new(Param{type_t: optional_type, ident: id})
+    },
+};
+
 pub Func: Box<Func> = {
-    "function" <id:Id> "(" <p:Params> ")" <t:("->" <Type>)?> <w:With?> <b:Stmts> "end" => {
+    "fun" <id:Id> "(" <p:Params> ")" <t:("->" <Type>)?> <w:With?> <b:Stmts> "end" => {
         let ret = match t {
             None => Type::Nil,
             Some(t) => t,
@@ -118,10 +130,14 @@ pub Func: Box<Func> = {
 };
 
 pub LambdaFunc: LambdaFunc = {
-    "(" <p:Params> ")" "->" "|" <e:Expr> "|" => {
+    "fun" "(" <p:OptionalParams> ")" "->" "(" <e:Expr> ")" => {
         let ret = Type::Unknown;
-	let ret_expr = Box::new(Stmt::Return(e));
+        let ret_expr = Box::new(Stmt::Return(e));
         LambdaFunc{return_t: ret, params: p, block: vec![ret_expr]}
+    },
+    "fun" "(" <p:OptionalParams> ")" "begin" <b:Stmts> "end" => {
+        let ret = Type::Unknown;
+        LambdaFunc{return_t: ret, params: p, block: b}
     },
 };
 

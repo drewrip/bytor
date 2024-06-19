@@ -1,10 +1,10 @@
-function foo(x: int32) -> int32
+fun foo(x: int32) -> int32
   return x + 4;
 end
 
 program test_program
 
-  function baz(x: int32, y: int32, z: int32) -> int32
+  fun baz(x: int32, y: int32, z: int32) -> int32
     let w = x + y + z;
     return w;
   end
