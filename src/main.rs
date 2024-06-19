@@ -9,6 +9,7 @@ use lalrpop_util::lalrpop_mod;
 pub mod ast;
 pub mod backends;
 pub mod codegen;
+pub mod infer;
 pub mod ir;
 pub mod semantic;
 pub mod symbol;
