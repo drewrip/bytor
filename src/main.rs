@@ -129,12 +129,12 @@ fn type_checking_passing1() {
 #[test]
 fn type_checking_passing2() {
     let source = r#"
-    function foo(a: float32, b: float32) -> float32
+    fun foo(a: float32, b: float32) -> float32
         let c = a;
         c *= b;
     end
 
-    function baz(x: int32, y: int32, z: int32) -> int32
+    fun baz(x: int32, y: int32, z: int32) -> int32
         let w = x + y + z;
     end
 
@@ -154,7 +154,7 @@ fn type_checking_passing2() {
 #[should_panic]
 fn type_checking_func_failing1() {
     let source = r#"
-    function foo(a: int32, b: float32) -> float32
+    fun foo(a: int32, b: float32) -> float32
         let c = a;
         let d = b;
     end
