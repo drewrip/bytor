@@ -1,0 +1,15 @@
+fun foo(x: int32) -> int32
+	return x + 5;
+end
+
+program test_funcs
+	let f: (int32) -> int32 = foo;
+	let res = f(3);
+
+	let g = fun (x: int32) -> (1i32);
+
+	let h = fun (x: int32) begin
+		return 23;
+	end;
+	return h(2);
+end

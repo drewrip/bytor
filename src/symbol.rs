@@ -78,19 +78,11 @@ impl Symbolic for ast::Stmt {
                 },
                 var: Var {
                     type_t: types::Type::Function(types::FunctionType {
-                        return_t: vec![func.ret_t.clone()],
+                        return_t: Box::new(func.return_t.clone()),
                         params_t: func
                             .params
                             .iter()
                             .map(|param| param.type_t.clone())
-                            .collect(),
-                        with_t: func
-                            .with
-                            .iter()
-                            .map(|with_var| match *with_var.clone() {
-                                ast::WithVar::Imm(_) => types::WithType::Imm,
-                                ast::WithVar::Mut(_) => types::WithType::Mut,
-                            })
                             .collect(),
                     }),
                     node: ast::Node::BlockNode(Box::new(func.block.clone())),

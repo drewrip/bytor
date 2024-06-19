@@ -1,4 +1,4 @@
-function foo(x: float32) -> float32
+fun foo(x: float32) -> float32
     return 2.0 * x;
 end
 
