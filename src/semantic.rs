@@ -134,6 +134,22 @@ pub fn new_empty_symbol_table() -> SymbolTable {
 
 pub type SymbolStack = Vec<SymbolTable>;
 
+pub fn slookup(stack: &SymbolStack, symbol: Symbol) -> Option<&Var> {
+    stack
+        .iter()
+        .rev()
+        .find_map(|table| table.table.get(&symbol))
+}
+
+// Assume this to be into the top of the stack
+pub fn sinsert(stack: &mut SymbolStack, symbol: Symbol, var: Var) -> Option<Var> {
+    stack
+        .last_mut()
+        .expect("No frames in symbol table!")
+        .table
+        .insert(symbol, var)
+}
+
 #[derive(Debug)]
 pub struct ProgramState {
     pub stack: SymbolStack,
@@ -153,22 +169,6 @@ pub fn new_state(ast: Box<Root>) -> ProgramState {
 
 impl ProgramState {
     pub const IR_OUTPUT_FILENAME: &'static str = "out.ir";
-
-    pub fn slookup(&self, symbol: Symbol) -> Option<&Var> {
-        self.stack
-            .iter()
-            .rev()
-            .find_map(|table| table.table.get(&symbol))
-    }
-
-    // Assume this to be into the top of the stack
-    pub fn sinsert(&mut self, symbol: Symbol, var: Var) -> Option<Var> {
-        self.stack
-            .last_mut()
-            .expect("No frames in symbol table!")
-            .table
-            .insert(symbol, var)
-    }
 
     pub fn spush(&mut self) -> Result<()> {
         self.stack.push(new_empty_symbol_table());
@@ -404,7 +404,7 @@ impl ProgramState {
                         };
                         stack.get_mut(node_idx).unwrap().set_checked();
                         stack.get_mut(node_idx).unwrap().set_type(oper1.clone());
-                        self.sinsert(symbol.clone(), var);
+                        sinsert(&mut self.stack, symbol.clone(), var);
                         self.rebase_stack(stack, node_idx);
                         self.inc_parent(stack, node_idx);
                         self.build_stack.push(IRNode::Assign(ir::Assign {
@@ -484,7 +484,7 @@ impl ProgramState {
                                 panic!("stack node isn't symbol: {:?}\nstack: {:?}", other, stack)
                             }
                         };
-                        let lookup_type = match self.slookup(symbol.clone()) {
+                        let lookup_type = match slookup(&self.stack, symbol.clone()) {
                             Some(var) => var.type_t.clone(),
                             None => panic!("ident not found!"),
                         };
@@ -565,7 +565,7 @@ impl ProgramState {
                 let num_args = args.len();
                 if progress == 0 {
                     stack.get_mut(node_idx).unwrap().set_total(num_args);
-                    let func_var = self.slookup(symbol.clone()).unwrap();
+                    let func_var = slookup(&self.stack, symbol.clone()).unwrap();
                     let func_type = match func_var.type_t.clone() {
                         types::Type::Function(func_type) => func_type,
                         _ => panic!("not a function!"),
@@ -584,7 +584,7 @@ impl ProgramState {
                         ));
                     }
                 } else if progress == num_args {
-                    let func_var = self.slookup(symbol.clone()).unwrap();
+                    let func_var = slookup(&self.stack, symbol.clone()).unwrap();
                     let func_type = match func_var.type_t.clone() {
                         types::Type::Function(func_type) => func_type,
                         _ => panic!("not a function!"),
@@ -627,7 +627,8 @@ impl ProgramState {
                             params_t: params,
                             return_t: Box::new(return_t),
                         });
-                        self.sinsert(
+                        sinsert(
+                            &mut self.stack,
                             new_symbol(func.ident.clone()),
                             new_var(
                                 function_type.clone(),
@@ -756,7 +757,7 @@ impl ProgramState {
             Expr::Call(symbol, args) => {
                 let num_args = args.len();
                 if progress == 0 {
-                    let func_var = self.slookup(symbol.clone()).unwrap();
+                    let func_var = slookup(&self.stack, symbol.clone()).unwrap();
                     let func_type = match func_var.type_t.clone() {
                         types::Type::Function(func_type) => func_type,
                         _ => panic!("not a function!"),
@@ -775,7 +776,7 @@ impl ProgramState {
                         ));
                     }
                 } else if progress == num_args {
-                    let func_var = self.slookup(symbol.clone()).unwrap();
+                    let func_var = slookup(&self.stack, symbol.clone()).unwrap();
                     let func_type = match func_var.type_t.clone() {
                         types::Type::Function(func_type) => func_type,
                         _ => panic!("not a function!"),
@@ -827,7 +828,8 @@ impl ProgramState {
                             params_t: params,
                             return_t: Box::new(return_t),
                         });
-                        self.sinsert(
+                        sinsert(
+                            &mut self.stack,
                             new_symbol(temp_func_name.clone()),
                             new_var(
                                 function_type.clone(),
@@ -872,7 +874,7 @@ impl ProgramState {
             Term::Id(ident) => {
                 stack.get_mut(node_idx).unwrap().set_total(0);
                 // Lookup type of identifier
-                let lookup_type = match self.slookup(new_symbol(ident.clone())) {
+                let lookup_type = match slookup(&self.stack, new_symbol(ident.clone())) {
                     Some(var) => var.type_t.clone(),
                     None => panic!("ident not found! -> {:?}", ident),
                 };
@@ -1011,7 +1013,7 @@ impl ProgramState {
                     params_t.push((param.ident.clone(), param_type.clone()));
                     let symbol = new_symbol(param.ident.clone());
                     let var = new_var(param_type, Node::SymbolNode(symbol.clone()));
-                    self.sinsert(symbol, var);
+                    sinsert(&mut self.stack, symbol, var);
                 }
                 let func_scope_num = self.get_new_scope();
                 let func_label = format!("_func_def_{}", func_scope_num);

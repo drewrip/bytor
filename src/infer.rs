@@ -1,6 +1,6 @@
 use crate::ast::Expr;
 use crate::semantic::SymbolStack;
-use crate::types::Type;
+use crate::types::{FunctionType, Type};
 
 use thiserror::Error;
 
@@ -10,6 +10,11 @@ pub enum TypeError {
     IdentNotFound(String),
     #[error("Couldn't unify types: {0}")]
     UnifyFailed(String),
+}
+
+#[derive(Debug, Clone)]
+pub enum Constraint {
+    Eq(Type, Type),
 }
 
 #[derive(Debug, Clone)]
@@ -110,8 +115,60 @@ fn unify_var(var: Type, t: Type, sub: Vec<Subst>) -> Result<Vec<Subst>, TypeErro
     }
 }
 
-// TODO
-pub fn solve() {}
+fn subst(sub: Vec<Subst>, t: Type) -> Type {
+    match t.clone() {
+        Type::Function(func) => {
+            let mut new_params = vec![];
+            for p in func.params_t {
+                new_params.push(subst(sub.clone(), p));
+            }
+            Type::Function(FunctionType {
+                params_t: new_params,
+                return_t: Box::new(subst(sub, *func.return_t.clone())),
+            })
+        }
+        Type::TypeVar(_) => match get_sub(sub.clone(), t.clone()) {
+            Some(repl_type) => repl_type,
+            None => t,
+        },
+        _ => t,
+    }
+}
+
+fn subst_into_constr(sub: Vec<Subst>, constr: Constraint) -> Constraint {
+    match constr {
+        Constraint::Eq(t1, t2) => Constraint::Eq(subst(sub.clone(), t1), subst(sub.clone(), t2)),
+    }
+}
+
+fn solve_helper(
+    constraints: Vec<Constraint>,
+    sub: &mut Vec<Subst>,
+) -> Result<Vec<Subst>, TypeError> {
+    match constraints.first() {
+        Some(cst) => match cst.clone() {
+            Constraint::Eq(t1, t2) => {
+                let new_subs = mgu(t1, t2)?;
+                sub.extend(new_subs);
+                solve_helper(
+                    constraints
+                        .iter()
+                        .skip(1)
+                        .map(|c| subst_into_constr(sub.clone(), c.clone()))
+                        .collect(),
+                    sub,
+                )
+            }
+        },
+        None => Ok(vec![]),
+    }
+}
+
+pub fn solve(constraints: Vec<Constraint>) -> Result<Vec<Subst>, TypeError> {
+    let mut substitutions = vec![];
+    solve_helper(constraints, &mut substitutions)?;
+    Ok(substitutions)
+}
 
 // Implement inference with:
 // Generalizing Hindley-Milner Type Inference Algorithms
@@ -129,7 +186,7 @@ mod tests {
     use crate::types::{FunctionType, Type};
 
     #[test]
-    fn simple_passing() {
+    fn infer_simple_passing() {
         let ctx: SymbolStack = vec![SymbolTable {
             table: vec![(new_symbol("x".into()), new_var(Type::Int32, Node::Null))]
                 .into_iter()
@@ -144,14 +201,14 @@ mod tests {
     }
 
     #[test]
-    fn simple_unify() {
+    fn unify_simple_unify() {
         let subs = mgu(Type::TypeVar(0), Type::Int32);
         println!("subs: {:?}", subs);
         assert!(subs.is_ok());
     }
 
     #[test]
-    fn simple_func_unify() {
+    fn unify_simple_func_unify() {
         let subs = mgu(
             Type::Function(FunctionType {
                 params_t: vec![Type::TypeVar(0), Type::Int64],
@@ -167,7 +224,7 @@ mod tests {
     }
 
     #[test]
-    fn simple_whole_function() {
+    fn unify_simple_whole_function() {
         let subs = mgu(
             Type::Function(FunctionType {
                 params_t: vec![Type::String, Type::Int64, Type::Float32],
@@ -176,6 +233,18 @@ mod tests {
             Type::TypeVar(0),
         );
         println!("subs: {:?}", subs);
+        assert!(subs.is_ok());
+    }
+
+    #[test]
+    fn solve_simple_whole_function() {
+        let t1 = Type::Function(FunctionType {
+            params_t: vec![Type::String, Type::Int64, Type::Float32],
+            return_t: Box::new(Type::Int32),
+        });
+        let t2 = Type::TypeVar(0);
+        let subs = solve(vec![Constraint::Eq(t1, t2)]);
+        println!("solved: {:?}", subs);
         assert!(subs.is_ok());
     }
 }
