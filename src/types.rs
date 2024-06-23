@@ -17,6 +17,7 @@ pub enum Type {
     // Compiler and existence
     Unknown,
     Nil,
+    TypeVar(u32),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
