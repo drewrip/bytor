@@ -38,30 +38,15 @@ pub trait Symbolic {
 
 impl Symbolic for ast::Program {
     fn get_symbol(&self) -> Option<IdentMapping> {
-        match self {
-            ast::Program::NoWith(ident, block) => Some(IdentMapping {
-                symbol: ident.clone(),
-                var: Var {
-                    type_t: types::Type::Program(types::ProgramType { with_t: vec![] }),
-                    node: ast::Node::BlockNode(Box::new(block.clone())),
-                },
-            }),
-            ast::Program::With(ident, with_vars, block) => Some(IdentMapping {
-                symbol: ident.clone(),
-                var: Var {
-                    type_t: types::Type::Program(types::ProgramType {
-                        with_t: with_vars
-                            .iter()
-                            .map(|with_var| match *with_var.clone() {
-                                ast::WithVar::Imm(_) => types::WithType::Imm,
-                                ast::WithVar::Mut(_) => types::WithType::Mut,
-                            })
-                            .collect(),
-                    }),
-                    node: ast::Node::BlockNode(Box::new(block.to_vec())),
-                },
-            }),
-        }
+        Some(IdentMapping {
+            symbol: Symbol {
+                ident: self.0.ident.clone(),
+            },
+            var: Var {
+                type_t: types::Type::Program,
+                node: ast::Node::BlockNode(Box::new(self.1.clone())),
+            },
+        })
     }
 }
 

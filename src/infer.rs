@@ -1,4 +1,4 @@
-use crate::ast::{Expr, Func, Program, Root, Term};
+use crate::ast::{Expr, Func, Program, Root, Term, TypedExpr, TypedTerm};
 use crate::semantic::SymbolStack;
 use crate::types::{FunctionType, Type};
 
@@ -37,7 +37,7 @@ fn get_sub(sub: Vec<Subst>, t: Type) -> Option<Type> {
 // Martelli and Montanari
 // Currently using: Unifcation by recursive descent - Baader and Snyder
 pub fn mgu(t1: Type, t2: Type) -> Result<Vec<Subst>, TypeError> {
-    let mut sub: Vec<Subst> = vec![];
+    let sub: Vec<Subst> = vec![];
     unify(t1, t2, sub)
 }
 
@@ -212,8 +212,20 @@ mod tests {
                 .collect(),
         }];
         let expr: Expr = Expr::Add(
-            Box::new(Expr::Term(Box::new(Term::Id("x".into())))),
-            Box::new(Expr::Term(Box::new(Term::Num(Num::Int32(5))))),
+            Box::new(TypedExpr {
+                type_t: Type::Unknown,
+                expr: Expr::Term(Box::new(TypedTerm {
+                    type_t: Type::Unknown,
+                    term: Term::Id("x".into()),
+                })),
+            }),
+            Box::new(TypedExpr {
+                type_t: Type::Unknown,
+                expr: Expr::Term(Box::new(TypedTerm {
+                    type_t: Type::Unknown,
+                    term: Term::Num(Num::Int32(5)),
+                })),
+            }),
         );
         let res = infer(ctx, expr);
         assert!(res.is_ok());

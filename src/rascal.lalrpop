@@ -47,7 +47,7 @@ pub ElseIfCase: Box<IfCase> = {
 };
 
 pub ElseCase: Box<IfCase> = {
-    "else" "then" <b:Stmts> => Box::new(IfCase {condition: Box::new(Expr::Term(Box::new(Term::Bool(true)))), block: b, is_else: true}),
+    "else" "then" <b:Stmts> => Box::new(IfCase {condition: Box::new(TypedExpr {type_t: Type::Unknown, expr: Expr::Term(Box::new(TypedTerm{ type_t: Type::Unknown, term: Term::Bool(true)}))}), block: b, is_else: true}),
 };
 
 pub Stmt: Box<Stmt> = {
@@ -80,25 +80,13 @@ pub Stmt: Box<Stmt> = {
         };
         Box::new(Stmt::If(vec![vec![ifcase], elseifcases, elsecases].concat()))
     },
-    <id:Id> "(" <args:Args> ")" ";" => Box::new(Stmt::Call(Symbol{ident: id}, Box::new(args))),
+    <id:Id> "(" <args:Args> ")" ";" => Box::new(Stmt::Call(Symbol{ident: id}, args)),
     <f:Func> => Box::new(Stmt::FuncDef(f)),
     "return" <e:Expr> ";" => Box::new(Stmt::Return(e)),
 };
 
 pub Program: Box<Program> = {
-    "program" <id:Id> <b:Stmts> "end" => Box::new(Program::NoWith(Symbol{ident: id}, b)),
-    "program" <id:Id> <w:With> <b:Stmts> "end" => Box::new(Program::With(Symbol{ident: id}, w, b)),
-};
-
-pub With: With = {
-    "with" "(" <w:WithVars> ")" => w,
-};
-
-pub WithVars = Comma<WithVar>;
-
-pub WithVar: Box<WithVar> = {
-    "mut" <id:Id> => Box::new(WithVar::Mut(Symbol{ident: id})),
-    <id:Id> => Box::new(WithVar::Imm(Symbol{ident: id})),
+    "program" <id:Id> <b:Stmts> "end" => Box::new(Program(Symbol{ident: id}, b)),
 };
 
 pub Params: Params = Comma<Param>;
@@ -119,13 +107,13 @@ pub OptionalParam: Box<Param> = {
     },
 };
 
-pub Func: Box<Func> = {
-    "fun" <id:Id> "(" <p:Params> ")" <t:("->" <Type>)?> <w:With?> <b:Stmts> "end" => {
+pub Func: Func = {
+    "fun" <id:Id> "(" <p:Params> ")" <t:("->" <Type>)?> <b:Stmts> "end" => {
         let ret = match t {
             None => Type::Nil,
             Some(t) => t,
         };
-        Box::new(Func{return_t: ret, params: p, ident: id, block: b})
+        Func{return_t: ret, params: p, ident: id, block: b}
     },
 };
 
@@ -141,35 +129,35 @@ pub LambdaFunc: LambdaFunc = {
     },
 };
 
-pub Expr: Box<Expr> = {
+pub Expr: Box<TypedExpr> = {
     #[precedence(level="0")] // Highest precedence
-    <l:LambdaFunc> => Box::new(Expr::LambdaFunc(l)),
+    <l:LambdaFunc> => Box::new(TypedExpr{ type_t: Type::Unknown, expr: Expr::LambdaFunc(l)}),
     #[precedence(level="1")] #[assoc(side="left")]
-    <id:Id> "(" <args:Args> ")" => Box::new(Expr::Call(Symbol{ident: id}, Box::new(args))),
-    <t:Term> => Box::new(Expr::Term(t)),
-    "!" <u:Expr> => Box::new(Expr::Not(u)),
-    "-" <u:Expr> => Box::new(Expr::Neg(u)),
+    <id:Id> "(" <args:Args> ")" => Box::new(TypedExpr{ type_t: Type::Unknown, expr: Expr::Call(Symbol{ident: id}, args)}),
+    <t:Term> => Box::new(TypedExpr{type_t: Type::Unknown, expr: Expr::Term(t)}),
+    "!" <u:Expr> => Box::new(TypedExpr{ type_t: Type::Unknown, expr: Expr::Not(u)}),
+    "-" <u:Expr> => Box::new(TypedExpr{ type_t: Type::Unknown, expr: Expr::Neg(u)}),
     #[precedence(level="2")] #[assoc(side="left")]
-    <l:Expr> "==" <r:Expr> => Box::new(Expr::Eq(l, r)),
-    <l:Expr> "!=" <r:Expr> => Box::new(Expr::Neq(l, r)),
-    <l:Expr> "<=" <r:Expr> => Box::new(Expr::Leq(l, r)),
-    <l:Expr> ">=" <r:Expr> => Box::new(Expr::Geq(l, r)),
-    <l:Expr> "<" <r:Expr> => Box::new(Expr::LessThan(l, r)),
-    <l:Expr> ">" <r:Expr> => Box::new(Expr::GreaterThan(l, r)),
+    <l:Expr> "==" <r:Expr> => Box::new(TypedExpr{ type_t: Type::Unknown, expr: Expr::Eq(l, r)}),
+    <l:Expr> "!=" <r:Expr> => Box::new(TypedExpr{ type_t: Type::Unknown, expr: Expr::Neq(l, r)}),
+    <l:Expr> "<=" <r:Expr> => Box::new(TypedExpr{ type_t: Type::Unknown, expr: Expr::Leq(l, r)}),
+    <l:Expr> ">=" <r:Expr> => Box::new(TypedExpr{ type_t: Type::Unknown, expr: Expr::Geq(l, r)}),
+    <l:Expr> "<" <r:Expr> => Box::new(TypedExpr{ type_t: Type::Unknown, expr: Expr::LessThan(l, r)}),
+    <l:Expr> ">" <r:Expr> => Box::new(TypedExpr{ type_t: Type::Unknown, expr: Expr::GreaterThan(l, r)}),
     #[precedence(level="3")] #[assoc(side="left")]
-    <l:Expr> "*" <r:Expr> => Box::new(Expr::Mult(l, r)),
-    <l:Expr> "/" <r:Expr> => Box::new(Expr::Div(l, r)),
+    <l:Expr> "*" <r:Expr> => Box::new(TypedExpr{ type_t: Type::Unknown, expr: Expr::Mult(l, r)}),
+    <l:Expr> "/" <r:Expr> => Box::new(TypedExpr{ type_t: Type::Unknown, expr: Expr::Div(l, r)}),
     #[precedence(level="4")] #[assoc(side="left")]
-    <l:Expr> "+" <r:Expr> => Box::new(Expr::Add(l, r)),
-    <l:Expr> "-" <r:Expr> => Box::new(Expr::Sub(l, r)),
+    <l:Expr> "+" <r:Expr> => Box::new(TypedExpr{ type_t: Type::Unknown, expr: Expr::Mult(l, r)}),
+    <l:Expr> "-" <r:Expr> => Box::new(TypedExpr{ type_t: Type::Unknown, expr: Expr::Sub(l, r)}),
 };
 
-pub Term: Box<Term> = {
-    <id:Id> => Box::new(Term::Id(id)),
-    <n:Num> => Box::new(Term::Num(n)),
-    <b:Bool> => Box::new(Term::Bool(b)),
-    <s:StringType> => Box::new(Term::String(s)),
-    "(" <t:Expr> ")" => Box::new(Term::Expr(t)),
+pub Term: Box<TypedTerm> = {
+    <id:Id> => Box::new(TypedTerm{ type_t: Type::Unknown, term: Term::Id(id)}),
+    <n:Num> => Box::new(TypedTerm{ type_t: Type::Unknown, term: Term::Num(n)}),
+    <b:Bool> => Box::new(TypedTerm{ type_t: Type::Bool, term: Term::Bool(b)}),
+    <s:StringType> => Box::new(TypedTerm{ type_t: Type::String, term: Term::String(s)}),
+    "(" <t:Expr> ")" => Box::new(TypedTerm{ type_t: Type::Unknown, term: Term::Expr(t)}),
 };
 
 pub Bool: bool = {

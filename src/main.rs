@@ -70,11 +70,12 @@ fn main() {
         (save_c, save_ir) = (false, false);
     }
     let src_file = fs::read_to_string(args.infile).expect("ERROR: couldn't find source file");
-    let mut root = rascal::RootParser::new().parse(&src_file).unwrap();
+    let root = rascal::RootParser::new().parse(&src_file).unwrap();
+
     // Perform semantic checks and type checking
     let mut state = semantic::new_state(root.clone());
-    semantic::ProgramState::visit_root(&mut state, &mut root);
-    state.build().unwrap();
+    state.build_ir().expect("couldn't generate IR");
+
     if save_ir {
         let serialized_ir = serde_json::to_string(&state.build_stack).expect("Serialization error");
         let mut file =
@@ -125,7 +126,7 @@ fn type_checking_passing1() {
     let root = rascal::RootParser::new().parse(source).unwrap();
     let mut state = semantic::new_state(root);
     // Perform semantic checks and type checking
-    let build_res = state.build();
+    let build_res = state.build_ir();
 
     assert!(build_res.is_ok());
 }
@@ -150,7 +151,7 @@ fn type_checking_passing2() {
     let root = rascal::RootParser::new().parse(source).unwrap();
     let mut state = semantic::new_state(root);
     // Perform semantic checks and type checking
-    let build_res = state.build();
+    let build_res = state.build_ir();
     assert!(build_res.is_ok());
 }
 
@@ -171,7 +172,7 @@ fn type_checking_func_failing1() {
     let root = rascal::RootParser::new().parse(source).unwrap();
     let mut state = semantic::new_state(root);
     // Perform semantic checks and type checking
-    let build_res = state.build();
+    let build_res = state.build_ir();
 }
 
 #[test]
@@ -188,7 +189,7 @@ fn type_checking_ifs_passing1() {
     let root = rascal::RootParser::new().parse(source).unwrap();
     let mut state = semantic::new_state(root);
     // Perform semantic checks and type checking
-    let build_res = state.build();
+    let build_res = state.build_ir();
     assert!(build_res.is_ok());
 }
 
@@ -214,6 +215,6 @@ fn type_checking_ifs_passing2() {
     let root = rascal::RootParser::new().parse(source).unwrap();
     let mut state = semantic::new_state(root);
     // Perform semantic checks and type checking
-    let build_res = state.build();
+    let build_res = state.build_ir();
     assert!(build_res.is_ok());
 }
