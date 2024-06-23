@@ -1,4 +1,4 @@
-use crate::ast::Expr;
+use crate::ast::{Expr, Func, Program, Root, Term};
 use crate::semantic::SymbolStack;
 use crate::types::{FunctionType, Type};
 
@@ -19,7 +19,6 @@ pub enum Constraint {
 
 #[derive(Debug, Clone)]
 pub struct Subst(Type, Type);
-
 fn has_sub(sub: Vec<Subst>, t: Type) -> bool {
     sub.iter().find(|s| s.0 == t).is_some()
 }
@@ -175,6 +174,26 @@ pub fn solve(constraints: Vec<Constraint>) -> Result<Vec<Subst>, TypeError> {
 // from Heeren, Hage, and Swierstra
 pub fn infer(gamma: SymbolStack, expr: Expr) -> Result<Type, TypeError> {
     Ok(Type::Nil)
+}
+
+pub struct TypingState {
+    type_var_counter: u32,
+    contraints: Vec<Constraint>,
+}
+
+impl TypingState {
+    pub fn new() -> Self {
+        TypingState {
+            type_var_counter: 0,
+            contraints: vec![],
+        }
+    }
+
+    pub fn get_new_type_var(&mut self) -> Type {
+        let new_tv = Type::TypeVar(self.type_var_counter);
+        self.type_var_counter += 1;
+        new_tv
+    }
 }
 
 #[cfg(test)]
