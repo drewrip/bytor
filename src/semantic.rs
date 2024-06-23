@@ -4,6 +4,7 @@ use std::fmt;
 use crate::ast::{AssignOp, Block, Expr, Func, Node, Program, Root, Stmt, Term};
 use crate::ir::{self, IRNode, Signature};
 use crate::symbol::{new_symbol, new_var, IdentMapping, Symbol, Symbolic, Var};
+use crate::traverse::Traverse;
 use crate::types::{self, Type};
 
 type Result<T> = std::result::Result<T, SemanticError>;
@@ -165,6 +166,10 @@ pub fn new_state(ast: Box<Root>) -> ProgramState {
         ast,
         scope_counter: 0,
     }
+}
+
+impl Traverse for ProgramState {
+    type Result = Result<()>;
 }
 
 impl ProgramState {

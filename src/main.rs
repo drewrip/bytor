@@ -13,11 +13,13 @@ pub mod infer;
 pub mod ir;
 pub mod semantic;
 pub mod symbol;
+pub mod traverse;
 pub mod types;
 
 use backends::{c::CGenContext, wasm::WasmGenContext};
 use codegen::CodeGen;
 use semantic::ProgramState;
+use traverse::Traverse;
 
 /// Compiler for the Rascal language
 #[derive(Parser, Debug)]
@@ -68,9 +70,10 @@ fn main() {
         (save_c, save_ir) = (false, false);
     }
     let src_file = fs::read_to_string(args.infile).expect("ERROR: couldn't find source file");
-    let root = rascal::RootParser::new().parse(&src_file).unwrap();
+    let mut root = rascal::RootParser::new().parse(&src_file).unwrap();
     // Perform semantic checks and type checking
-    let mut state = semantic::new_state(root);
+    let mut state = semantic::new_state(root.clone());
+    semantic::ProgramState::visit_root(&mut state, &mut root);
     state.build().unwrap();
     if save_ir {
         let serialized_ir = serde_json::to_string(&state.build_stack).expect("Serialization error");
