@@ -84,6 +84,9 @@ impl From<CodeGenContext> for CGenContext {
 
 impl CodeGen for CGenContext {
     fn gen(&mut self) -> Result<(), CodeGenError> {
+        for n in self.build_stack.clone() {
+            println!("- {:?}", n);
+        }
         self.gen_includes();
         self.save_global_idx();
         let start = self.gen_globals();
@@ -187,10 +190,10 @@ impl CGenContext {
             .build_stack
             .iter()
             .enumerate()
-            .find(|(_, ir_node)| matches_variant!(ir_node, IRNode::EndGlobalSection))
+            .find(|(_, ir_node)| matches!(ir_node, IRNode::EndGlobalSection))
             .unwrap()
             .0;
-        self.gen_code(idx, end_of_globals - 1) + 2
+        self.gen_code(idx, end_of_globals) + 2
     }
 
     fn gen_program(&mut self, idx: usize) -> usize {
@@ -204,19 +207,19 @@ impl CGenContext {
         let mut node_idx = idx;
         while node_idx < end_idx {
             node_idx = match self.build_stack.get(node_idx).unwrap() {
-                IRNode::Term(term) => self.gen_term(node_idx).unwrap(),
-                IRNode::Eval(eval) => self.gen_eval(node_idx).unwrap(),
-                IRNode::Label(label) => self.gen_label(node_idx).unwrap(),
+                IRNode::Term(_) => self.gen_term(node_idx).unwrap(),
+                IRNode::Eval(_) => self.gen_eval(node_idx).unwrap(),
+                IRNode::Label(_) => self.gen_label(node_idx).unwrap(),
                 IRNode::Assign(assign) => self.gen_assign(node_idx, assign.clone()).unwrap(),
                 IRNode::Reassign(reassign) => {
                     self.gen_reassign(node_idx, reassign.clone()).unwrap()
                 }
                 // If Statement
-                IRNode::If(if_case) => self.gen_if(node_idx).unwrap(),
-                IRNode::IfCase(if_case) => self.gen_if_case(node_idx).unwrap(),
-                IRNode::ElseIfCase(if_case) => self.gen_else_if_case(node_idx).unwrap(),
-                IRNode::ElseCase(if_case) => self.gen_else_case(node_idx).unwrap(),
-                IRNode::EndIf(if_case) => self.gen_end_if(node_idx).unwrap(),
+                IRNode::If(_) => self.gen_if(node_idx).unwrap(),
+                IRNode::IfCase(_) => self.gen_if_case(node_idx).unwrap(),
+                IRNode::ElseIfCase(_) => self.gen_else_if_case(node_idx).unwrap(),
+                IRNode::ElseCase(_) => self.gen_else_case(node_idx).unwrap(),
+                IRNode::EndIf(_) => self.gen_end_if(node_idx).unwrap(),
                 // Function Definitions
                 IRNode::FuncDef(def, _) => self.gen_func_def(node_idx, def.clone()).unwrap(),
                 IRNode::EndFuncDef(_) => self.gen_end_func_def(node_idx).unwrap(),
@@ -290,40 +293,62 @@ impl CGenContext {
                     let mut sub_expr: Vec<String> = vec!["(".into()];
                     let evaluated = match eval {
                         ir::Func::Add(_) => {
-                            format!("{} + {}", stack.pop().unwrap(), stack.pop().unwrap())
+                            let rhs = stack.pop().unwrap();
+                            let lhs = stack.pop().unwrap();
+                            format!("{} + {}", lhs, rhs)
                         }
                         ir::Func::Sub(_) => {
-                            format!("{} - {}", stack.pop().unwrap(), stack.pop().unwrap())
+                            let rhs = stack.pop().unwrap();
+                            let lhs = stack.pop().unwrap();
+                            format!("{} - {}", lhs, rhs)
                         }
                         ir::Func::Mult(_) => {
-                            format!("{} * {}", stack.pop().unwrap(), stack.pop().unwrap())
+                            let rhs = stack.pop().unwrap();
+                            let lhs = stack.pop().unwrap();
+                            format!("{} * {}", lhs, rhs)
                         }
                         ir::Func::Div(_) => {
-                            format!("{} / {}", stack.pop().unwrap(), stack.pop().unwrap())
+                            let rhs = stack.pop().unwrap();
+                            let lhs = stack.pop().unwrap();
+                            format!("{} / {}", lhs, rhs)
                         }
                         ir::Func::Lt(_) => {
-                            format!("{} < {}", stack.pop().unwrap(), stack.pop().unwrap())
+                            let rhs = stack.pop().unwrap();
+                            let lhs = stack.pop().unwrap();
+                            format!("{} < {}", lhs, rhs)
                         }
                         ir::Func::Gt(_) => {
-                            format!("{} > {}", stack.pop().unwrap(), stack.pop().unwrap())
+                            let rhs = stack.pop().unwrap();
+                            let lhs = stack.pop().unwrap();
+                            format!("{} > {}", lhs, rhs)
                         }
                         ir::Func::Leq(_) => {
-                            format!("{} <= {}", stack.pop().unwrap(), stack.pop().unwrap())
+                            let rhs = stack.pop().unwrap();
+                            let lhs = stack.pop().unwrap();
+                            format!("{} <= {}", lhs, rhs)
                         }
                         ir::Func::Geq(_) => {
-                            format!("{} >= {}", stack.pop().unwrap(), stack.pop().unwrap())
+                            let rhs = stack.pop().unwrap();
+                            let lhs = stack.pop().unwrap();
+                            format!("{} >= {}", lhs, rhs)
                         }
                         ir::Func::Eq(_) => {
-                            format!("{} == {}", stack.pop().unwrap(), stack.pop().unwrap())
+                            let rhs = stack.pop().unwrap();
+                            let lhs = stack.pop().unwrap();
+                            format!("{} == {}", lhs, rhs)
                         }
                         ir::Func::Neq(_) => {
-                            format!("{} != {}", stack.pop().unwrap(), stack.pop().unwrap())
+                            let rhs = stack.pop().unwrap();
+                            let lhs = stack.pop().unwrap();
+                            format!("{} != {}", lhs, rhs)
                         }
                         ir::Func::Not(_) => {
-                            format!("!{}", stack.pop().unwrap())
+                            let u = stack.pop().unwrap();
+                            format!("!{}", u)
                         }
                         ir::Func::Neg(_) => {
-                            format!("-{}", stack.pop().unwrap())
+                            let u = stack.pop().unwrap();
+                            format!("-{}", u)
                         }
                         ir::Func::Func(sig) => {
                             let mut call: String = sig.symbol.ident.clone();

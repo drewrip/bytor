@@ -13,7 +13,7 @@ pub enum Type {
     Bool,
     // User defined types
     Function(FunctionType),
-    Program(ProgramType),
+    Program,
     // Compiler and existence
     Unknown,
     Nil,
@@ -24,15 +24,4 @@ pub enum Type {
 pub struct FunctionType {
     pub params_t: Vec<Type>,
     pub return_t: Box<Type>,
-}
-
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
-pub enum WithType {
-    Mut,
-    Imm,
-}
-
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
-pub struct ProgramType {
-    pub with_t: Vec<WithType>,
 }

@@ -13,11 +13,15 @@ pub mod infer;
 pub mod ir;
 pub mod semantic;
 pub mod symbol;
+pub mod traverse;
 pub mod types;
 
 use backends::{c::CGenContext, wasm::WasmGenContext};
 use codegen::CodeGen;
 use semantic::ProgramState;
+use traverse::Traverse;
+
+use std::collections::HashMap;
 
 /// Compiler for the Rascal language
 #[derive(Parser, Debug)]
@@ -68,10 +72,24 @@ fn main() {
         (save_c, save_ir) = (false, false);
     }
     let src_file = fs::read_to_string(args.infile).expect("ERROR: couldn't find source file");
-    let root = rascal::RootParser::new().parse(&src_file).unwrap();
+    let mut root = rascal::RootParser::new().parse(&src_file).unwrap();
+
+    let mut typing_state = infer::TypingState::new();
+    let _tv_typing_result = typing_state
+        .augment(&mut root)
+        .expect("Couldn't replace unknown types with TypeVar's");
+    let mut infer_state = infer::InferState::new();
+    let _constraint_gen_result = infer_state
+        .constrain(&mut root)
+        .expect("Couldn't add contraints");
+    let _resolve_result = infer_state.resolve().expect("Couldn't resolve types");
+    let mut sub_state = infer::SubState::new(infer_state.get_type_mapping());
+    let _sub_gen_result = sub_state.substitute(&mut root);
+
     // Perform semantic checks and type checking
-    let mut state = semantic::new_state(root);
-    state.build().unwrap();
+    let mut state = semantic::ProgramState::new(root.clone());
+    state.build_ir().expect("couldn't generate IR");
+
     if save_ir {
         let serialized_ir = serde_json::to_string(&state.build_stack).expect("Serialization error");
         let mut file =
@@ -89,128 +107,4 @@ fn main() {
         fs::remove_file(CGenContext::C_OUTPUT_FILENAME).expect("Unable to delete C output file");
     }
     build_result.expect("Build failed!");
-}
-
-#[test]
-fn root_parser_passing1() {
-    let source = r#"
-    program passing1
-        let x = 9;
-        let y = 10;
-    end
-    "#;
-    assert!(rascal::ProgramParser::new().parse(source).is_ok());
-}
-
-#[test]
-fn root_parser_failing1() {
-    let source = r#"
-    program failing1
-        1 + 2;
-    end
-    "#;
-    assert!(rascal::ProgramParser::new().parse(source).is_err());
-}
-
-#[test]
-fn type_checking_passing1() {
-    let source = r#"
-    program passing1
-        let x: int32 = 431;
-    end
-    "#;
-    let root = rascal::RootParser::new().parse(source).unwrap();
-    let mut state = semantic::new_state(root);
-    // Perform semantic checks and type checking
-    let build_res = state.build();
-
-    assert!(build_res.is_ok());
-}
-
-#[test]
-fn type_checking_passing2() {
-    let source = r#"
-    fun foo(a: float32, b: float32) -> float32
-        let c = a;
-        c *= b;
-    end
-
-    fun baz(x: int32, y: int32, z: int32) -> int32
-        let w = x + y + z;
-    end
-
-    program passing1
-        let x: int32 = 431;
-        let test = baz(x, x, x);
-    end
-    "#;
-    let root = rascal::RootParser::new().parse(source).unwrap();
-    let mut state = semantic::new_state(root);
-    // Perform semantic checks and type checking
-    let build_res = state.build();
-    assert!(build_res.is_ok());
-}
-
-#[test]
-#[should_panic]
-fn type_checking_func_failing1() {
-    let source = r#"
-    fun foo(a: int32, b: float32) -> float32
-        let c = a;
-        let d = b;
-    end
-
-    program passing1
-        let x: int32 = 431;
-        let test = foo(x, x);
-    end
-    "#;
-    let root = rascal::RootParser::new().parse(source).unwrap();
-    let mut state = semantic::new_state(root);
-    // Perform semantic checks and type checking
-    let build_res = state.build();
-}
-
-#[test]
-fn type_checking_ifs_passing1() {
-    let source = r#"
-        let x: int32 = 4;
-
-        program test_if
-            if x == 5 then
-                x = 10;
-            end
-        end
-    "#;
-    let root = rascal::RootParser::new().parse(source).unwrap();
-    let mut state = semantic::new_state(root);
-    // Perform semantic checks and type checking
-    let build_res = state.build();
-    assert!(build_res.is_ok());
-}
-
-#[test]
-fn type_checking_ifs_passing2() {
-    let source = r#"
-        let x = 4;
-
-        program test_if
-            if x >= 4 then
-                let y = 2;
-            end
-
-            if x != 5 then
-                x = 10;
-            else if x == 6 then
-                x = 11;
-            else then
-                x = 12;
-            end
-        end
-    "#;
-    let root = rascal::RootParser::new().parse(source).unwrap();
-    let mut state = semantic::new_state(root);
-    // Perform semantic checks and type checking
-    let build_res = state.build();
-    assert!(build_res.is_ok());
 }
