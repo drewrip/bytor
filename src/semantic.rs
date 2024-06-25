@@ -54,15 +54,6 @@ pub struct ProgramState {
     pub scope_counter: usize,
 }
 
-pub fn new_state(ast: Box<Root>) -> ProgramState {
-    ProgramState {
-        stack: vec![],
-        build_stack: vec![],
-        ast,
-        scope_counter: 0,
-    }
-}
-
 impl Traverse for ProgramState {
     type Error = BuildIRError;
 
@@ -302,7 +293,7 @@ impl Traverse for ProgramState {
             },
             func_ir_id.clone(),
         ));
-        self.visit_block(&mut func.block);
+        self.visit_block(&mut func.block)?;
         self.build_stack.push(IRNode::EndFuncDef(func_ir_id));
         Ok(())
     }
@@ -316,7 +307,7 @@ impl Traverse for ProgramState {
             self.visit_expr(&mut if_case.condition.clone())?;
             if n == 0 {
                 self.build_stack.push(IRNode::IfCase(if_ir_id.clone()));
-            } else if n == num_cases - 1 {
+            } else if if_case.is_else {
                 self.build_stack.push(IRNode::ElseCase(if_ir_id.clone()));
             } else {
                 self.build_stack.push(IRNode::ElseIfCase(if_ir_id.clone()));
@@ -330,6 +321,15 @@ impl Traverse for ProgramState {
 
 impl ProgramState {
     pub const IR_OUTPUT_FILENAME: &'static str = "out.ir";
+
+    pub fn new(ast: Box<Root>) -> ProgramState {
+        ProgramState {
+            stack: vec![],
+            build_stack: vec![],
+            ast,
+            scope_counter: 0,
+        }
+    }
 
     pub fn spush(&mut self) -> Result<(), BuildIRError> {
         self.stack.push(new_empty_symbol_table());

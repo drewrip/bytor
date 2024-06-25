@@ -1,7 +1,6 @@
 use crate::ast::*;
-
 pub trait Traverse {
-    type Error;
+    type Error: std::error::Error;
 
     fn visit_root(&mut self, root: &mut Root) -> Result<(), Self::Error> {
         let Root {

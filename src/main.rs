@@ -21,6 +21,8 @@ use codegen::CodeGen;
 use semantic::ProgramState;
 use traverse::Traverse;
 
+use std::collections::HashMap;
+
 /// Compiler for the Rascal language
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -73,12 +75,19 @@ fn main() {
     let mut root = rascal::RootParser::new().parse(&src_file).unwrap();
 
     let mut typing_state = infer::TypingState::new();
-    let ast_with_tvs = typing_state.visit_root(&mut root);
-
-    println!("ast: {:?}", root);
+    let _tv_typing_result = typing_state
+        .augment(&mut root)
+        .expect("Couldn't replace unknown types with TypeVar's");
+    let mut infer_state = infer::InferState::new();
+    let _constraint_gen_result = infer_state
+        .constrain(&mut root)
+        .expect("Couldn't add contraints");
+    let _resolve_result = infer_state.resolve().expect("Couldn't resolve types");
+    let mut sub_state = infer::SubState::new(infer_state.get_type_mapping());
+    let _sub_gen_result = sub_state.substitute(&mut root);
 
     // Perform semantic checks and type checking
-    let mut state = semantic::new_state(root.clone());
+    let mut state = semantic::ProgramState::new(root.clone());
     state.build_ir().expect("couldn't generate IR");
 
     if save_ir {
@@ -129,7 +138,7 @@ fn type_checking_passing1() {
     end
     "#;
     let root = rascal::RootParser::new().parse(source).unwrap();
-    let mut state = semantic::new_state(root);
+    let mut state = semantic::ProgramState::new(root);
     // Perform semantic checks and type checking
     let build_res = state.build_ir();
 
@@ -154,7 +163,7 @@ fn type_checking_passing2() {
     end
     "#;
     let root = rascal::RootParser::new().parse(source).unwrap();
-    let mut state = semantic::new_state(root);
+    let mut state = semantic::ProgramState::new(root);
     // Perform semantic checks and type checking
     let build_res = state.build_ir();
     assert!(build_res.is_ok());
@@ -175,7 +184,7 @@ fn type_checking_func_failing1() {
     end
     "#;
     let root = rascal::RootParser::new().parse(source).unwrap();
-    let mut state = semantic::new_state(root);
+    let mut state = semantic::ProgramState::new(root);
     // Perform semantic checks and type checking
     let build_res = state.build_ir();
 }
@@ -192,7 +201,7 @@ fn type_checking_ifs_passing1() {
         end
     "#;
     let root = rascal::RootParser::new().parse(source).unwrap();
-    let mut state = semantic::new_state(root);
+    let mut state = semantic::ProgramState::new(root);
     // Perform semantic checks and type checking
     let build_res = state.build_ir();
     assert!(build_res.is_ok());
@@ -218,7 +227,7 @@ fn type_checking_ifs_passing2() {
         end
     "#;
     let root = rascal::RootParser::new().parse(source).unwrap();
-    let mut state = semantic::new_state(root);
+    let mut state = semantic::ProgramState::new(root);
     // Perform semantic checks and type checking
     let build_res = state.build_ir();
     assert!(build_res.is_ok());

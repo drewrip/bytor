@@ -148,7 +148,7 @@ pub Expr: Box<TypedExpr> = {
     <l:Expr> "*" <r:Expr> => Box::new(TypedExpr{ type_t: Type::Unknown, expr: Expr::Mult(l, r)}),
     <l:Expr> "/" <r:Expr> => Box::new(TypedExpr{ type_t: Type::Unknown, expr: Expr::Div(l, r)}),
     #[precedence(level="4")] #[assoc(side="left")]
-    <l:Expr> "+" <r:Expr> => Box::new(TypedExpr{ type_t: Type::Unknown, expr: Expr::Mult(l, r)}),
+    <l:Expr> "+" <r:Expr> => Box::new(TypedExpr{ type_t: Type::Unknown, expr: Expr::Add(l, r)}),
     <l:Expr> "-" <r:Expr> => Box::new(TypedExpr{ type_t: Type::Unknown, expr: Expr::Sub(l, r)}),
 };
 
