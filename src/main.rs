@@ -70,7 +70,12 @@ fn main() {
         (save_c, save_ir) = (false, false);
     }
     let src_file = fs::read_to_string(args.infile).expect("ERROR: couldn't find source file");
-    let root = rascal::RootParser::new().parse(&src_file).unwrap();
+    let mut root = rascal::RootParser::new().parse(&src_file).unwrap();
+
+    let mut typing_state = infer::TypingState::new();
+    let ast_with_tvs = typing_state.visit_root(&mut root);
+
+    println!("ast: {:?}", root);
 
     // Perform semantic checks and type checking
     let mut state = semantic::new_state(root.clone());

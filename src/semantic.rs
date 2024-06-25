@@ -123,6 +123,11 @@ impl Traverse for ProgramState {
             }
             Stmt::Assign(symbol, var, expr) => {
                 self.visit_expr(expr)?;
+                sinsert(
+                    &mut self.stack,
+                    symbol.clone(),
+                    new_var(expr.type_t.clone(), Node::Null),
+                );
                 self.build_stack.push(IRNode::Assign(ir::Assign {
                     type_t: var.type_t.clone(),
                     symbol: symbol.clone(),
@@ -185,6 +190,11 @@ impl Traverse for ProgramState {
                     }),
                 };
                 self.visit_expr(&mut new_expr)?;
+                sinsert(
+                    &mut self.stack,
+                    symbol.clone(),
+                    new_var(new_expr.type_t, Node::Null),
+                );
                 self.build_stack.push(IRNode::Reassign(ir::Reassign {
                     type_t: var.type_t.clone(),
                     symbol: symbol.clone(),
@@ -266,10 +276,24 @@ impl Traverse for ProgramState {
     fn visit_func(&mut self, func: &mut Func) -> Result<(), Self::Error> {
         let func_ir_num = self.get_new_scope();
         let func_ir_id = format!("_func_def_{}", func_ir_num);
+        let return_type = func.return_t.clone();
+        let param_types: Vec<Type> = func.params.iter().map(|p| p.type_t.clone()).collect();
+        let func_symbol = new_symbol(func.ident.clone());
+        sinsert(
+            &mut self.stack,
+            func_symbol.clone(),
+            new_var(
+                Type::Function(types::FunctionType {
+                    params_t: param_types.clone(),
+                    return_t: Box::new(return_type.clone()),
+                }),
+                Node::Null,
+            ),
+        );
         self.build_stack.push(IRNode::FuncDef(
             ir::FuncDef {
-                symbol: new_symbol(func.ident.clone()),
-                return_t: func.return_t.clone(),
+                symbol: func_symbol,
+                return_t: return_type.clone(),
                 params_t: func
                     .params
                     .iter()

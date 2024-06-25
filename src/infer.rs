@@ -1,7 +1,9 @@
-use crate::ast::{Expr, Func, Program, Root, Term, TypedExpr, TypedTerm};
+use crate::ast::{Expr, Func, Param, Program, Root, Stmt, Term, TypedExpr, TypedTerm};
 use crate::semantic::SymbolStack;
+use crate::traverse::Traverse;
 use crate::types::{FunctionType, Type};
 
+use std::collections::HashMap;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -10,6 +12,8 @@ pub enum TypeError {
     IdentNotFound(String),
     #[error("Couldn't unify types: {0}")]
     UnifyFailed(String),
+    #[error("Numeric type couldn't be derived: {0}")]
+    DeriveNumType(String),
 }
 
 #[derive(Debug, Clone)]
@@ -178,21 +182,214 @@ pub fn infer(gamma: SymbolStack, expr: Expr) -> Result<Type, TypeError> {
 
 pub struct TypingState {
     type_var_counter: u32,
+    type_mapping: HashMap<Type, Type>,
+}
+
+pub struct InferState {
     contraints: Vec<Constraint>,
+    symbols: SymbolStack,
+}
+
+impl Traverse for TypingState {
+    type Error = TypeError;
+
+    fn visit_expr(&mut self, expr: &mut TypedExpr) -> Result<(), Self::Error> {
+        match expr.expr {
+            Expr::Add(ref mut lhs, ref mut rhs) => {
+                self.visit_expr(lhs)?;
+                self.visit_expr(rhs)?;
+            }
+            Expr::Sub(ref mut lhs, ref mut rhs) => {
+                self.visit_expr(lhs)?;
+                self.visit_expr(rhs)?;
+            }
+            Expr::Mult(ref mut lhs, ref mut rhs) => {
+                self.visit_expr(lhs)?;
+                self.visit_expr(rhs)?;
+            }
+            Expr::Div(ref mut lhs, ref mut rhs) => {
+                self.visit_expr(lhs)?;
+                self.visit_expr(rhs)?;
+            }
+            Expr::Eq(ref mut lhs, ref mut rhs) => {
+                self.visit_expr(lhs)?;
+                self.visit_expr(rhs)?;
+            }
+            Expr::Neq(ref mut lhs, ref mut rhs) => {
+                self.visit_expr(lhs)?;
+                self.visit_expr(rhs)?;
+            }
+            Expr::Leq(ref mut lhs, ref mut rhs) => {
+                self.visit_expr(lhs)?;
+                self.visit_expr(rhs)?;
+            }
+            Expr::Geq(ref mut lhs, ref mut rhs) => {
+                self.visit_expr(lhs)?;
+                self.visit_expr(rhs)?;
+            }
+            Expr::LessThan(ref mut lhs, ref mut rhs) => {
+                self.visit_expr(lhs)?;
+                self.visit_expr(rhs)?;
+            }
+            Expr::GreaterThan(ref mut lhs, ref mut rhs) => {
+                self.visit_expr(lhs)?;
+                self.visit_expr(rhs)?;
+            }
+            Expr::Not(ref mut u) => {
+                self.visit_expr(u)?;
+            }
+            Expr::Neg(ref mut u) => {
+                self.visit_expr(u)?;
+            }
+            Expr::Term(ref mut t) => {
+                self.visit_term(t)?;
+            }
+            Expr::Call(_, ref mut args) => {
+                for mut arg in args {
+                    self.visit_expr(&mut arg)?;
+                }
+            }
+            Expr::LambdaFunc(ref mut lf) => {
+                lf.params = lf
+                    .params
+                    .iter()
+                    .map(|p| {
+                        Box::new(Param {
+                            ident: p.ident.clone(),
+                            type_t: match p.type_t.clone() {
+                                Type::Unknown => self.get_new_type_var(),
+                                _ => p.type_t.clone(),
+                            },
+                        })
+                    })
+                    .collect();
+                lf.return_t = match lf.return_t {
+                    Type::Unknown => self.get_new_type_var(),
+                    _ => lf.return_t.clone(),
+                };
+                self.visit_block(&mut lf.block)?;
+            }
+        }
+        expr.type_t = match expr.type_t {
+            Type::Unknown => self.get_new_type_var(),
+            _ => expr.type_t.clone(),
+        };
+        Ok(())
+    }
+
+    fn visit_term(&mut self, term: &mut TypedTerm) -> Result<(), Self::Error> {
+        match term.term {
+            Term::Id(_) => {
+                term.type_t = match term.type_t {
+                    Type::Unknown => self.get_new_type_var(),
+                    _ => term.type_t.clone(),
+                };
+            }
+            Term::Num(ref num) => {
+                term.type_t = match Type::try_from(num.clone()) {
+                    Ok(t) => Ok(t),
+                    Err(_) => Err(TypeError::DeriveNumType("Couldn't derive Num type".into())),
+                }?;
+            }
+            Term::Bool(_) => {
+                term.type_t = Type::Bool;
+            }
+            Term::String(_) => {
+                term.type_t = Type::String;
+            }
+            Term::Expr(ref mut expr) => {
+                self.visit_expr(expr)?;
+                term.type_t = match term.type_t {
+                    Type::Unknown => self.get_new_type_var(),
+                    _ => term.type_t.clone(),
+                };
+            }
+        };
+        Ok(())
+    }
+
+    fn visit_stmt(&mut self, stmt: &mut Stmt) -> Result<(), Self::Error> {
+        match stmt {
+            Stmt::If(if_cases) => {
+                for if_case in if_cases {
+                    self.visit_expr(&mut if_case.condition)?;
+                    self.visit_block(&mut if_case.block)?;
+                }
+            }
+            Stmt::Assign(_, var, expr) => {
+                self.visit_expr(expr)?;
+                var.type_t = match var.type_t.clone() {
+                    Type::Unknown => self.get_new_type_var(),
+                    other => other.clone(),
+                };
+            }
+            Stmt::Reassign(_, var, _, expr) => {
+                self.visit_expr(expr)?;
+                var.type_t = match var.type_t.clone() {
+                    Type::Unknown => self.get_new_type_var(),
+                    other => other.clone(),
+                };
+            }
+            Stmt::Call(_, args) => {
+                for arg in args {
+                    self.visit_expr(arg)?;
+                }
+            }
+            Stmt::FuncDef(func) => {
+                func.params = func
+                    .params
+                    .clone()
+                    .into_iter()
+                    .map(|p| {
+                        Box::new(Param {
+                            ident: p.ident,
+                            type_t: match p.type_t {
+                                Type::Unknown => self.get_new_type_var(),
+                                _ => p.type_t,
+                            },
+                        })
+                    })
+                    .collect();
+                func.return_t = match func.return_t {
+                    Type::Unknown => self.get_new_type_var(),
+                    _ => func.return_t.clone(),
+                };
+                self.visit_block(&mut func.block)?;
+            }
+            Stmt::Return(expr) => {
+                self.visit_expr(expr)?;
+            }
+        };
+        Ok(())
+    }
+}
+
+impl Traverse for InferState {
+    type Error = TypeError;
 }
 
 impl TypingState {
     pub fn new() -> Self {
         TypingState {
             type_var_counter: 0,
-            contraints: vec![],
+            type_mapping: HashMap::new(),
         }
     }
 
     pub fn get_new_type_var(&mut self) -> Type {
         let new_tv = Type::TypeVar(self.type_var_counter);
+        self.type_mapping.insert(new_tv.clone(), Type::Unknown);
         self.type_var_counter += 1;
         new_tv
+    }
+}
+
+impl InferState {
+    pub fn new() -> Self {
+        InferState {
+            contraints: vec![],
+            symbols: vec![],
+        }
     }
 }
 

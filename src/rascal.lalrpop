@@ -54,21 +54,21 @@ pub Stmt: Box<Stmt> = {
     "let" <i:Id> "=" <e:Expr> ";" => Box::new(
         Stmt::Assign(
           Symbol{ident: i},
-          Box::new(Var{type_t: Type::Unknown, node: Node::ExprNode(e.clone())}),
+          Box::new(Var{type_t: Type::Unknown, node: Node::Null}),
           e
         )
     ),
     "let" <i:Id> ":" <t:Type> "=" <e:Expr> ";" => Box::new(
         Stmt::Assign(
           Symbol{ident: i},
-          Box::new(Var{type_t: t, node: Node::ExprNode(e.clone())}),
+          Box::new(Var{type_t: t, node: Node::Null}),
           e
         )
     ),
     <i:Id> <ao:AssignOp> <e:Expr> ";" => Box::new(
         Stmt::Reassign(
           Symbol{ident: i},
-          Box::new(Var{type_t: Type::Unknown, node: Node::ExprNode(e.clone())}),
+          Box::new(Var{type_t: Type::Unknown, node: Node::Null}),
           ao,
           e
         )
