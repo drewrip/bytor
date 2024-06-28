@@ -192,6 +192,7 @@ pub struct InferState {
     pub constraints: Vec<Constraint>,
     symbols: SymbolStack,
     type_mapping: HashMap<Type, Type>,
+    surrounding_func_types: Vec<Type>,
 }
 
 pub struct SubState {
@@ -384,7 +385,13 @@ impl Traverse for InferState {
         self.spush();
         self.visit_preblock(preblock)?;
         self.visit_postblock(postblock)?;
+        self.surrounding_func_types
+            .push(Type::Function(FunctionType {
+                params_t: vec![],
+                return_t: Box::new(Type::Int32),
+            }));
         self.visit_program(program)?;
+        self.surrounding_func_types.pop();
         self.spop();
         Ok(())
     }
@@ -517,21 +524,21 @@ impl Traverse for InferState {
                 let target_func = slookup(&self.symbols, symbol.clone()).ok_or(
                     TypeError::IdentNotFound(format!("Function {:?} not found", symbol.clone())),
                 )?;
-                let target_func_type = match target_func.type_t.clone() {
-                    Type::Function(func) => Ok(func),
-                    other => Err(TypeError::IdentNotFound(format!(
-                        "Symbol {:?} is not callable",
-                        other
-                    ))),
-                }?;
-                for (arg, target_param_type) in args.into_iter().zip(target_func_type.params_t) {
-                    self.visit_expr(arg)?;
-                    self.constraints
-                        .push(Constraint::Eq(arg.type_t.clone(), target_param_type));
-                }
+                self.constraints.push(Constraint::Eq(
+                    target_func.type_t.clone(),
+                    Type::Function(FunctionType {
+                        params_t: args.iter().map(|p| p.type_t.clone()).collect(),
+                        return_t: Box::new(expr.type_t.clone()),
+                    }),
+                ));
             }
             Expr::LambdaFunc(ref mut lf) => {
                 self.spush();
+                self.surrounding_func_types
+                    .push(Type::Function(FunctionType {
+                        params_t: lf.params.iter().map(|p| p.type_t.clone()).collect(),
+                        return_t: Box::new(lf.return_t.clone()),
+                    }));
                 for param in lf.params.clone() {
                     let Param { type_t, ident } = *param;
                     sinsert(
@@ -541,6 +548,7 @@ impl Traverse for InferState {
                     );
                 }
                 self.visit_block(&mut lf.block)?;
+                self.surrounding_func_types.pop();
                 self.spop();
             }
         }
@@ -597,18 +605,17 @@ impl Traverse for InferState {
                 let target_func = slookup(&self.symbols, symbol.clone()).ok_or(
                     TypeError::IdentNotFound(format!("Function {:?} not found", symbol.clone())),
                 )?;
-                let target_func_type = match target_func.type_t.clone() {
-                    Type::Function(func) => Ok(func),
-                    other => Err(TypeError::IdentNotFound(format!(
-                        "Symbol {:?} is not callable",
-                        other
-                    ))),
-                }?;
-                for (arg, target_param_type) in args.into_iter().zip(target_func_type.params_t) {
-                    self.visit_expr(arg)?;
-                    self.constraints
-                        .push(Constraint::Eq(arg.type_t.clone(), target_param_type));
-                }
+                // Inferring types based of these call statements needs to be treated
+                // differently since there is no return type to deduce
+                /*
+                self.constraints.push(Constraint::Eq(
+                    target_func.type_t.clone(),
+                    Type::Function(FunctionType {
+                        params_t: args.iter().map(|p| p.type_t.clone()).collect(),
+                        return_t: Box::new(expr.type_t.clone()),
+                    }),
+                ));
+                */
             }
             Stmt::FuncDef(func) => {
                 sinsert(
@@ -623,6 +630,11 @@ impl Traverse for InferState {
                     ),
                 );
                 self.spush();
+                self.surrounding_func_types
+                    .push(Type::Function(FunctionType {
+                        params_t: func.params.iter().map(|p| p.type_t.clone()).collect(),
+                        return_t: Box::new(func.return_t.clone()),
+                    }));
                 for param in func.params.clone() {
                     let Param { type_t, ident } = *param;
                     sinsert(
@@ -632,12 +644,22 @@ impl Traverse for InferState {
                     );
                 }
                 self.visit_block(&mut func.block)?;
+                self.surrounding_func_types.pop();
                 self.spop();
             }
             Stmt::Return(expr) => {
-                // TODO: the type of `expr` needs to be Eq to
-                // the return value of the surrounding function
                 self.visit_expr(expr)?;
+                let surround_type = self.surrounding_func_types.iter().last().unwrap();
+                let surround_func_type = match surround_type {
+                    Type::Function(func) => Ok(func),
+                    _ => Err(TypeError::IdentNotFound(
+                        "Function type on func stack is not function".into(),
+                    )),
+                }?;
+                self.constraints.push(Constraint::Eq(
+                    expr.type_t.clone(),
+                    *surround_func_type.return_t.clone(),
+                ));
             }
         };
         Ok(())
@@ -815,6 +837,7 @@ impl InferState {
             constraints: vec![],
             symbols: vec![],
             type_mapping: HashMap::new(),
+            surrounding_func_types: vec![],
         }
     }
 
