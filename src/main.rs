@@ -22,9 +22,7 @@ pub mod types;
 use backends::{c::CGenContext, wasm::WasmGenContext};
 use codegen::CodeGen;
 use semantic::ProgramState;
-use traverse::Traverse;
 
-use std::collections::HashMap;
 
 /// Compiler for the Rascal language
 #[derive(Parser, Debug)]
