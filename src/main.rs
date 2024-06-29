@@ -5,7 +5,6 @@ use std::{
 };
 
 use clap::{Parser, ValueEnum};
-use ir::IRNode;
 use lalrpop_util::lalrpop_mod;
 use thiserror::Error;
 
