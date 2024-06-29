@@ -1,10 +1,9 @@
 use std::collections::HashMap;
-use std::fmt;
 
 use crate::ast::{
     AssignOp, Block, Expr, Func, IfCases, Node, Program, Root, Stmt, Term, TypedExpr, TypedTerm,
 };
-use crate::ir::{self, IRNode, Signature};
+use crate::ir::{self, IRNode};
 use crate::symbol::{new_symbol, new_var, IdentMapping, Symbol, Symbolic, Var};
 use crate::traverse::Traverse;
 use crate::types::{self, Type};

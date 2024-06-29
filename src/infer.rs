@@ -1,4 +1,4 @@
-use crate::ast::{Block, Expr, Func, Node, Param, Program, Root, Stmt, Term, TypedExpr, TypedTerm};
+use crate::ast::{Block, Expr, Node, Param, Root, Stmt, Term, TypedExpr, TypedTerm};
 use crate::semantic::{new_empty_symbol_table, sinsert, slookup, SymbolStack, SymbolTable};
 use crate::symbol::{new_symbol, new_var};
 use crate::traverse::Traverse;
