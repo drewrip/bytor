@@ -1,4 +1,4 @@
-function fib(n: int32) -> int32
+fun fib(n: int32) -> int32
     if n == 0 then
         return 0;
     else if n == 1 then

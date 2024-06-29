@@ -1,0 +1,210 @@
+use std::str::FromStr;
+use crate::ast::*;
+use crate::types::*;
+use crate::symbol::{Symbol, Var};
+
+grammar;
+
+pub Root: Box<Root> = {
+    <pre_b:Stmts> <prog:Program> <post_b:Stmts> => Box::new(
+        Root{preblock: pre_b, program: prog, postblock: post_b}
+    ),
+};
+
+pub Stmts: Vec<Box<Stmt>> = {
+    <v:(<Stmt>)*> => v,
+}
+
+pub Exprs = Comma<Expr>;
+pub Args = Exprs;
+
+Semicolon<T>: Vec<T> = {
+    <mut v:(<T> ";")*> <e:(<T> ";")?> => match e {
+        None => v,
+        Some(e) => {
+            v.push(e);
+            v
+        }
+    }
+};
+
+Comma<T>: Vec<T> = {
+    <mut v:(<T> ",")*> <e:T?> => match e {
+        None => v,
+        Some(e) => {
+            v.push(e);
+            v
+        }
+    }
+};
+
+pub IfCase: Box<IfCase> = {
+    "if" <e:Expr> "then" <b:Stmts> => Box::new(IfCase {condition: e, block: b, is_else: false}),
+};
+
+pub ElseIfCase: Box<IfCase> = {
+    "else" "if" <e:Expr> "then" <b:Stmts> => Box::new(IfCase {condition: e, block: b, is_else: false}),
+};
+
+pub ElseCase: Box<IfCase> = {
+    "else" "then" <b:Stmts> => Box::new(IfCase {condition: Box::new(TypedExpr {type_t: Type::Unknown, expr: Expr::Term(Box::new(TypedTerm{ type_t: Type::Unknown, term: Term::Bool(true)}))}), block: b, is_else: true}),
+};
+
+pub Stmt: Box<Stmt> = {
+    "let" <i:Id> "=" <e:Expr> ";" => Box::new(
+        Stmt::Assign(
+          Symbol{ident: i},
+          Box::new(Var{type_t: Type::Unknown, node: Node::Null}),
+          e
+        )
+    ),
+    "let" <i:Id> ":" <t:Type> "=" <e:Expr> ";" => Box::new(
+        Stmt::Assign(
+          Symbol{ident: i},
+          Box::new(Var{type_t: t, node: Node::Null}),
+          e
+        )
+    ),
+    <i:Id> <ao:AssignOp> <e:Expr> ";" => Box::new(
+        Stmt::Reassign(
+          Symbol{ident: i},
+          Box::new(Var{type_t: Type::Unknown, node: Node::Null}),
+          ao,
+          e
+        )
+    ),
+    <ifcase:IfCase> <elseifcases:ElseIfCase*> <elsecase:ElseCase?> "end" => {
+        let elsecases: Vec<Box<IfCase>> = match elsecase {
+            Some(elsecasepresent) => vec![elsecasepresent],
+            None => vec![],
+        };
+        Box::new(Stmt::If(vec![vec![ifcase], elseifcases, elsecases].concat()))
+    },
+    <id:Id> "(" <args:Args> ")" ";" => Box::new(Stmt::Call(Symbol{ident: id}, args)),
+    <f:Func> => Box::new(Stmt::FuncDef(f)),
+    "return" <e:Expr> ";" => Box::new(Stmt::Return(e)),
+};
+
+pub Program: Box<Program> = {
+    "program" <id:Id> <b:Stmts> "end" => Box::new(Program(Symbol{ident: id}, b)),
+};
+
+pub Params: Params = Comma<Param>;
+
+pub Param: Box<Param> = {
+    <id:Id> ":" <t:Type> => Box::new(Param{type_t: t, ident: id}),
+};
+
+pub OptionalParams: Params = Comma<OptionalParam>;
+
+pub OptionalParam: Box<Param> = {
+    <id:Id> <t:(":" <Type>)?> => {
+        let optional_type = match t {
+            Some(found_type) => found_type,
+            None => Type::Unknown,
+        };
+        Box::new(Param{type_t: optional_type, ident: id})
+    },
+};
+
+pub Func: Func = {
+    "fun" <id:Id> "(" <p:Params> ")" <t:("->" <Type>)?> <b:Stmts> "end" => {
+        let ret = match t {
+            None => Type::Nil,
+            Some(t) => t,
+        };
+        Func{return_t: ret, params: p, ident: id, block: b}
+    },
+};
+
+pub LambdaFunc: LambdaFunc = {
+    "fun" "(" <p:OptionalParams> ")" "->" "(" <e:Expr> ")" => {
+        let ret = Type::Unknown;
+        let ret_expr = Box::new(Stmt::Return(e));
+        LambdaFunc{return_t: ret, params: p, block: vec![ret_expr]}
+    },
+    "fun" "(" <p:OptionalParams> ")" "begin" <b:Stmts> "end" => {
+        let ret = Type::Unknown;
+        LambdaFunc{return_t: ret, params: p, block: b}
+    },
+};
+
+pub Expr: Box<TypedExpr> = {
+    #[precedence(level="0")] // Highest precedence
+    <l:LambdaFunc> => Box::new(TypedExpr{ type_t: Type::Unknown, expr: Expr::LambdaFunc(l)}),
+    #[precedence(level="1")] #[assoc(side="left")]
+    <id:Id> "(" <args:Args> ")" => Box::new(TypedExpr{ type_t: Type::Unknown, expr: Expr::Call(Symbol{ident: id}, args)}),
+    <t:Term> => Box::new(TypedExpr{type_t: Type::Unknown, expr: Expr::Term(t)}),
+    "!" <u:Expr> => Box::new(TypedExpr{ type_t: Type::Unknown, expr: Expr::Not(u)}),
+    "-" <u:Expr> => Box::new(TypedExpr{ type_t: Type::Unknown, expr: Expr::Neg(u)}),
+    #[precedence(level="2")] #[assoc(side="left")]
+    <l:Expr> "==" <r:Expr> => Box::new(TypedExpr{ type_t: Type::Unknown, expr: Expr::Eq(l, r)}),
+    <l:Expr> "!=" <r:Expr> => Box::new(TypedExpr{ type_t: Type::Unknown, expr: Expr::Neq(l, r)}),
+    <l:Expr> "<=" <r:Expr> => Box::new(TypedExpr{ type_t: Type::Unknown, expr: Expr::Leq(l, r)}),
+    <l:Expr> ">=" <r:Expr> => Box::new(TypedExpr{ type_t: Type::Unknown, expr: Expr::Geq(l, r)}),
+    <l:Expr> "<" <r:Expr> => Box::new(TypedExpr{ type_t: Type::Unknown, expr: Expr::LessThan(l, r)}),
+    <l:Expr> ">" <r:Expr> => Box::new(TypedExpr{ type_t: Type::Unknown, expr: Expr::GreaterThan(l, r)}),
+    #[precedence(level="3")] #[assoc(side="left")]
+    <l:Expr> "*" <r:Expr> => Box::new(TypedExpr{ type_t: Type::Unknown, expr: Expr::Mult(l, r)}),
+    <l:Expr> "/" <r:Expr> => Box::new(TypedExpr{ type_t: Type::Unknown, expr: Expr::Div(l, r)}),
+    #[precedence(level="4")] #[assoc(side="left")]
+    <l:Expr> "+" <r:Expr> => Box::new(TypedExpr{ type_t: Type::Unknown, expr: Expr::Add(l, r)}),
+    <l:Expr> "-" <r:Expr> => Box::new(TypedExpr{ type_t: Type::Unknown, expr: Expr::Sub(l, r)}),
+};
+
+pub Term: Box<TypedTerm> = {
+    <id:Id> => Box::new(TypedTerm{ type_t: Type::Unknown, term: Term::Id(id)}),
+    <n:Num> => Box::new(TypedTerm{ type_t: Type::Unknown, term: Term::Num(n)}),
+    <b:Bool> => Box::new(TypedTerm{ type_t: Type::Bool, term: Term::Bool(b)}),
+    <s:StringType> => Box::new(TypedTerm{ type_t: Type::String, term: Term::String(s)}),
+    "(" <t:Expr> ")" => Box::new(TypedTerm{ type_t: Type::Unknown, term: Term::Expr(t)}),
+};
+
+pub Bool: bool = {
+    "true" => true,
+    "false" => false,
+}
+
+NumInt32: i32 = <s:r"[0-9]+(i32)?"> => i32::from_str(&s.replace("i32", "")).unwrap();
+NumInt64: i64 = <s:r"[0-9]+i64"> => i64::from_str(&s.replace("i64", "")).unwrap();
+NumUInt32: u32 = <s:r"[0-9]+u32"> => u32::from_str(&s.replace("u32", "")).unwrap();
+NumUInt64: u64 = <s:r"[0-9]+u64"> => u64::from_str(&s.replace("u64", "")).unwrap();
+
+NumFloat32: f32 = <s:r"[0-9]+\.[0-9]+f32"> => f32::from_str(&s.replace("f32", "")).unwrap();
+NumFloat64: f64 = <s:r"[0-9]+\.[0-9]+(f64)?"> => f64::from_str(&s.replace("f64", "")).unwrap();
+
+pub Num: Num = {
+    <n:NumInt32> => Num::Int32(n),
+    <n:NumInt64> => Num::Int64(n),
+    <n:NumUInt32> => Num::UInt32(n),
+    <n:NumUInt64> => Num::UInt64(n),
+    <n:NumFloat32> => Num::Float32(n),
+    <n:NumFloat64> => Num::Float64(n),
+};
+
+Id: String = r"([a-zA-Z_])([\w\d_])*" => String::from(<>);
+
+StringType: String = r#""(?:\\.|[^"\\])*""# => String::from(<>);
+
+pub AssignOp: AssignOp = {
+    "=" => AssignOp::Assign,
+    "+=" => AssignOp::AddAssign,
+    "-=" => AssignOp::SubAssign,
+    "*=" => AssignOp::MultAssign,
+    "/=" => AssignOp::DivAssign,
+};
+
+pub Type: Type = {
+    "int64" => Type::Int64,
+    "int32" => Type::Int32,
+    "uint64" => Type::UInt64,
+    "uint32" => Type::UInt32,
+    "float64" => Type::Float64,
+    "float32" => Type::Float32,
+    "bool" => Type::Bool,
+    "string" => Type::String,
+    "(" <args:ArgTypes> ")" "->" <ret:Type> => Type::Function(FunctionType{params_t: args, return_t: Box::new(ret)}),
+    "Nil" => Type::Nil,
+}
+
+pub ArgTypes: Vec<Type> = Comma<Type>;

@@ -1,124 +1,20 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use crate::ast::{AssignOp, Block, Expr, Func, Node, Program, Root, Stmt, Term};
+use crate::ast::{
+    AssignOp, Block, Expr, Func, IfCases, Node, Program, Root, Stmt, Term, TypedExpr, TypedTerm,
+};
 use crate::ir::{self, IRNode, Signature};
 use crate::symbol::{new_symbol, new_var, IdentMapping, Symbol, Symbolic, Var};
+use crate::traverse::Traverse;
 use crate::types::{self, Type};
 
-type Result<T> = std::result::Result<T, SemanticError>;
+use thiserror::Error;
 
-#[derive(Debug, Clone)]
-pub enum SemanticError {
-    SomeError,
-    StackCorruption,
-}
-
-impl fmt::Display for SemanticError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Semantic Error: {:?}", self)
-    }
-}
-
-// Helpful annotations to keep around the semantic checking stack
-#[derive(Debug, Clone)]
-pub enum AnnotationNode {
-    Label(String),
-    If(String),
-    IfCase(String),
-    ElseIfCase(String),
-    ElseCase(String),
-    EndIf(String),
-    FuncDef(ir::FuncDef, String),
-    EndFuncDef(String),
-    Eval(ir::Func),
-}
-
-pub fn new_sem_node(
-    ast_node: Node,
-    type_t: types::Type,
-    total: usize,
-    checked: bool,
-    parent: Option<usize>,
-) -> SemNode {
-    SemNode {
-        progress: 0,
-        total,
-        checked,
-        ast_node,
-        type_t,
-        symbols: None,
-        parent,
-        annotation: None,
-    }
-}
-
-pub fn new_annotation(annotation: Option<AnnotationNode>) -> SemNode {
-    SemNode {
-        progress: 0,
-        total: 1,
-        checked: false,
-        ast_node: Node::Null,
-        type_t: types::Type::Nil,
-        symbols: None,
-        parent: None,
-        annotation,
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct SemNode {
-    pub progress: usize,
-    pub total: usize,
-    pub checked: bool,
-    pub ast_node: Node,
-    pub type_t: types::Type,
-    pub symbols: Option<SymbolTable>,
-    pub parent: Option<usize>, // Optionally the node_idx of the parent AST node
-    // NOTE: we also now need a way to reference the location of a function or jump target
-    pub annotation: Option<AnnotationNode>,
-}
-
-impl SemNode {
-    pub fn get_prog(&self) -> usize {
-        self.progress
-    }
-
-    pub fn set_prog(&mut self, progress: usize) {
-        self.progress = progress;
-    }
-
-    pub fn inc_prog(&mut self) {
-        self.progress += 1;
-    }
-
-    pub fn get_total(&self) -> usize {
-        self.total
-    }
-
-    pub fn set_total(&mut self, total: usize) {
-        self.total = total;
-    }
-
-    pub fn get_type(&self) -> types::Type {
-        self.type_t.clone()
-    }
-
-    pub fn set_type(&mut self, type_t: types::Type) {
-        self.type_t = type_t;
-    }
-
-    pub fn set_checked(&mut self) {
-        self.checked = true;
-    }
-
-    pub fn get_checked(&self) -> bool {
-        self.checked
-    }
-
-    pub fn add_symbols(&mut self, symbol_table: Option<SymbolTable>) {
-        self.symbols = symbol_table;
-    }
+#[derive(Error, Debug)]
+pub enum BuildIRError {
+    #[error("Couldn't build IR: {0}")]
+    SomeError(String),
 }
 
 #[derive(Debug, Clone)]
@@ -134,6 +30,22 @@ pub fn new_empty_symbol_table() -> SymbolTable {
 
 pub type SymbolStack = Vec<SymbolTable>;
 
+pub fn slookup(stack: &SymbolStack, symbol: Symbol) -> Option<&Var> {
+    stack
+        .iter()
+        .rev()
+        .find_map(|table| table.table.get(&symbol))
+}
+
+// Assume this to be into the top of the stack
+pub fn sinsert(stack: &mut SymbolStack, symbol: Symbol, var: Var) -> Option<Var> {
+    stack
+        .last_mut()
+        .expect("No frames in symbol table!")
+        .table
+        .insert(symbol, var)
+}
+
 #[derive(Debug)]
 pub struct ProgramState {
     pub stack: SymbolStack,
@@ -142,35 +54,284 @@ pub struct ProgramState {
     pub scope_counter: usize,
 }
 
-pub fn new_state(ast: Box<Root>) -> ProgramState {
-    ProgramState {
-        stack: vec![],
-        build_stack: vec![],
-        ast,
-        scope_counter: 0,
+impl Traverse for ProgramState {
+    type Error = BuildIRError;
+
+    fn visit_root(&mut self, root: &mut Root) -> Result<(), Self::Error> {
+        let Root {
+            preblock,
+            program,
+            postblock,
+        } = root;
+        self.build_stack.push(IRNode::GlobalSection);
+        self.visit_preblock(preblock)?;
+        self.visit_postblock(postblock)?;
+        self.build_stack.push(IRNode::EndGlobalSection);
+        self.visit_program(program)?;
+        Ok(())
+    }
+
+    fn visit_preblock(&mut self, preblock: &mut Block) -> Result<(), Self::Error> {
+        self.visit_block(preblock)
+    }
+
+    fn visit_postblock(&mut self, postblock: &mut Block) -> Result<(), Self::Error> {
+        self.visit_block(postblock)
+    }
+
+    fn visit_program(&mut self, program: &mut Program) -> Result<(), Self::Error> {
+        self.visit_block(&mut program.1)
+    }
+
+    fn visit_block(&mut self, block: &mut Block) -> Result<(), Self::Error> {
+        self.spush()?;
+        for s in block {
+            self.visit_stmt(s)?;
+        }
+        let _ = self.spop();
+        Ok(())
+    }
+
+    fn visit_stmt(&mut self, stmt: &mut Stmt) -> Result<(), Self::Error> {
+        match stmt {
+            Stmt::If(ifcases) => {
+                self.visit_if_cases(ifcases)?;
+            }
+            Stmt::Call(symbol, args) => {
+                self.visit_args(args);
+                let resolved_ret_t = match slookup(&self.stack, symbol.clone()) {
+                    Some(var) => &var.type_t,
+                    None => {
+                        return Err(BuildIRError::SomeError("Missing symbol".into()));
+                    }
+                };
+                self.build_stack
+                    .push(IRNode::Eval(ir::Func::Func(ir::Signature {
+                        symbol: symbol.clone(),
+                        params_t: args.iter().map(|p| p.type_t.clone()).collect(),
+                        return_t: resolved_ret_t.clone(),
+                    })));
+            }
+            Stmt::Assign(symbol, var, expr) => {
+                self.visit_expr(expr)?;
+                sinsert(
+                    &mut self.stack,
+                    symbol.clone(),
+                    new_var(expr.type_t.clone(), Node::Null),
+                );
+                self.build_stack.push(IRNode::Assign(ir::Assign {
+                    type_t: var.type_t.clone(),
+                    symbol: symbol.clone(),
+                }));
+            }
+            Stmt::Reassign(symbol, var, assign_op, expr) => {
+                let mut new_expr = match assign_op {
+                    AssignOp::Assign => expr.clone(),
+                    AssignOp::AddAssign => Box::new(TypedExpr {
+                        type_t: expr.type_t.clone(),
+                        expr: Expr::Add(
+                            Box::new(TypedExpr {
+                                type_t: expr.type_t.clone(),
+                                expr: Expr::Term(Box::new(TypedTerm {
+                                    type_t: expr.type_t.clone(),
+                                    term: Term::Id(symbol.ident.clone()),
+                                })),
+                            }),
+                            expr.clone(),
+                        ),
+                    }),
+                    AssignOp::SubAssign => Box::new(TypedExpr {
+                        type_t: expr.type_t.clone(),
+                        expr: Expr::Sub(
+                            Box::new(TypedExpr {
+                                type_t: expr.type_t.clone(),
+                                expr: Expr::Term(Box::new(TypedTerm {
+                                    type_t: expr.type_t.clone(),
+                                    term: Term::Id(symbol.ident.clone()),
+                                })),
+                            }),
+                            expr.clone(),
+                        ),
+                    }),
+                    AssignOp::MultAssign => Box::new(TypedExpr {
+                        type_t: expr.type_t.clone(),
+                        expr: Expr::Mult(
+                            Box::new(TypedExpr {
+                                type_t: expr.type_t.clone(),
+                                expr: Expr::Term(Box::new(TypedTerm {
+                                    type_t: expr.type_t.clone(),
+                                    term: Term::Id(symbol.ident.clone()),
+                                })),
+                            }),
+                            expr.clone(),
+                        ),
+                    }),
+                    AssignOp::DivAssign => Box::new(TypedExpr {
+                        type_t: expr.type_t.clone(),
+                        expr: Expr::Div(
+                            Box::new(TypedExpr {
+                                type_t: expr.type_t.clone(),
+                                expr: Expr::Term(Box::new(TypedTerm {
+                                    type_t: expr.type_t.clone(),
+                                    term: Term::Id(symbol.ident.clone()),
+                                })),
+                            }),
+                            expr.clone(),
+                        ),
+                    }),
+                };
+                self.visit_expr(&mut new_expr)?;
+                sinsert(
+                    &mut self.stack,
+                    symbol.clone(),
+                    new_var(new_expr.type_t, Node::Null),
+                );
+                self.build_stack.push(IRNode::Reassign(ir::Reassign {
+                    type_t: var.type_t.clone(),
+                    symbol: symbol.clone(),
+                }));
+            }
+            Stmt::FuncDef(func) => {
+                self.visit_func(func)?;
+            }
+            Stmt::Return(expr) => {
+                self.visit_expr(expr)?;
+                self.build_stack.push(IRNode::Return);
+            }
+        };
+        Ok(())
+    }
+
+    fn visit_expr(&mut self, expr: &mut TypedExpr) -> Result<(), Self::Error> {
+        match expr.expr.clone() {
+            Expr::Add(_, _) => self.binary_op(expr.clone()),
+            Expr::Sub(_, _) => self.binary_op(expr.clone()),
+            Expr::Mult(_, _) => self.binary_op(expr.clone()),
+            Expr::Div(_, _) => self.binary_op(expr.clone()),
+            Expr::Eq(_, _) => self.binary_op(expr.clone()),
+            Expr::Neq(_, _) => self.binary_op(expr.clone()),
+            Expr::Leq(_, _) => self.binary_op(expr.clone()),
+            Expr::Geq(_, _) => self.binary_op(expr.clone()),
+            Expr::LessThan(_, _) => self.binary_op(expr.clone()),
+            Expr::GreaterThan(_, _) => self.binary_op(expr.clone()),
+            Expr::Not(_) => self.unary_op(expr.clone()),
+            Expr::Neg(_) => self.unary_op(expr.clone()),
+            Expr::Term(mut term) => self.visit_term(&mut term),
+            Expr::Call(symbol, mut args) => {
+                self.visit_args(&mut args);
+                self.build_stack
+                    .push(IRNode::Eval(ir::Func::Func(ir::Signature {
+                        symbol,
+                        params_t: args.iter().map(|p| p.type_t.clone()).collect(),
+                        return_t: expr.type_t.clone(),
+                    })));
+                Ok(())
+            }
+            Expr::LambdaFunc(mut lf) => self.visit_lambda_func(&mut lf),
+        }
+    }
+
+    fn visit_term(&mut self, term: &mut TypedTerm) -> Result<(), Self::Error> {
+        match term.term.clone() {
+            Term::Id(ident) => {
+                self.build_stack.push(IRNode::Term(ir::Term {
+                    type_t: term.type_t.clone(),
+                    value: ir::Value::Id(ident),
+                }));
+            }
+            Term::Expr(mut expr) => {
+                self.visit_expr(&mut expr);
+            }
+            Term::Bool(b) => {
+                self.build_stack.push(IRNode::Term(ir::Term {
+                    type_t: term.type_t.clone(),
+                    value: ir::Value::Bool(b),
+                }));
+            }
+            Term::String(s) => {
+                self.build_stack.push(IRNode::Term(ir::Term {
+                    type_t: term.type_t.clone(),
+                    value: ir::Value::String(s),
+                }));
+            }
+            Term::Num(num) => {
+                self.build_stack.push(IRNode::Term(ir::Term {
+                    type_t: term.type_t.clone(),
+                    value: num.try_into().unwrap(),
+                }));
+            }
+        }
+        Ok(())
+    }
+
+    fn visit_func(&mut self, func: &mut Func) -> Result<(), Self::Error> {
+        let func_ir_num = self.get_new_scope();
+        let func_ir_id = format!("_func_def_{}", func_ir_num);
+        let return_type = func.return_t.clone();
+        let param_types: Vec<Type> = func.params.iter().map(|p| p.type_t.clone()).collect();
+        let func_symbol = new_symbol(func.ident.clone());
+        sinsert(
+            &mut self.stack,
+            func_symbol.clone(),
+            new_var(
+                Type::Function(types::FunctionType {
+                    params_t: param_types.clone(),
+                    return_t: Box::new(return_type.clone()),
+                }),
+                Node::Null,
+            ),
+        );
+        self.build_stack.push(IRNode::FuncDef(
+            ir::FuncDef {
+                symbol: func_symbol,
+                return_t: return_type.clone(),
+                params_t: func
+                    .params
+                    .iter()
+                    .map(|p| (p.ident.clone(), p.type_t.clone()))
+                    .collect(),
+            },
+            func_ir_id.clone(),
+        ));
+        self.visit_block(&mut func.block)?;
+        self.build_stack.push(IRNode::EndFuncDef(func_ir_id));
+        Ok(())
+    }
+
+    fn visit_if_cases(&mut self, if_cases: &mut IfCases) -> Result<(), Self::Error> {
+        let if_ir_num = self.get_new_scope();
+        let if_ir_id = format!("_if_stmt_{}", if_ir_num);
+        self.build_stack.push(IRNode::If(if_ir_id.clone()));
+        let num_cases = if_cases.len();
+        for (n, if_case) in if_cases.into_iter().enumerate() {
+            self.visit_expr(&mut if_case.condition.clone())?;
+            if n == 0 {
+                self.build_stack.push(IRNode::IfCase(if_ir_id.clone()));
+            } else if if_case.is_else {
+                self.build_stack.push(IRNode::ElseCase(if_ir_id.clone()));
+            } else {
+                self.build_stack.push(IRNode::ElseIfCase(if_ir_id.clone()));
+            }
+            self.visit_block(&mut if_case.block)?;
+        }
+        self.build_stack.push(IRNode::EndIf(if_ir_id.clone()));
+        Ok(())
     }
 }
 
 impl ProgramState {
     pub const IR_OUTPUT_FILENAME: &'static str = "out.ir";
 
-    pub fn slookup(&self, symbol: Symbol) -> Option<&Var> {
-        self.stack
-            .iter()
-            .rev()
-            .find_map(|table| table.table.get(&symbol))
+    pub fn new(ast: Box<Root>) -> ProgramState {
+        ProgramState {
+            stack: vec![],
+            build_stack: vec![],
+            ast,
+            scope_counter: 0,
+        }
     }
 
-    // Assume this to be into the top of the stack
-    pub fn sinsert(&mut self, symbol: Symbol, var: Var) -> Option<Var> {
-        self.stack
-            .last_mut()
-            .expect("No frames in symbol table!")
-            .table
-            .insert(symbol, var)
-    }
-
-    pub fn spush(&mut self) -> Result<()> {
+    pub fn spush(&mut self) -> Result<(), BuildIRError> {
         self.stack.push(new_empty_symbol_table());
         Ok(())
     }
@@ -185,7 +346,7 @@ impl ProgramState {
         new_scope
     }
 
-    pub fn build(&mut self) -> Result<()> {
+    pub fn build_ir(&mut self) -> Result<(), BuildIRError> {
         self.spush();
         // Find the signature of `program` blocks
         //  -> if there are none, we can abort compilation :)
@@ -193,16 +354,13 @@ impl ProgramState {
         // Discover the functions and variables in the global scope
         //  -> but, don't parse function bodies
         self.global_ident_discovery()?;
-        // Now we can 'recursively' check the bodies of the
-        // globally defined variables, functions and 'programs'.
-        self.check_global_definitions()?;
         // check the program
-        self.check_program()?;
-        self.spop();
-
+        let mut ast = self.ast.clone();
+        self.visit_root(&mut ast)?;
         Ok(())
     }
-    fn program_signature_discovery(&mut self) -> Result<()> {
+
+    fn program_signature_discovery(&mut self) -> Result<(), BuildIRError> {
         let gen_prog_symbol = self.ast.program.get_symbol();
         if let Some(prog_symbol) = gen_prog_symbol {
             self.stack
@@ -214,7 +372,7 @@ impl ProgramState {
         Ok(())
     }
 
-    fn global_ident_discovery(&mut self) -> Result<()> {
+    fn global_ident_discovery(&mut self) -> Result<(), BuildIRError> {
         // First pass: discover types and signatures of global identifiers
         let pre_idents: Vec<IdentMapping> = self
             .ast
@@ -242,943 +400,123 @@ impl ProgramState {
         Ok(())
     }
 
-    fn check_global_definitions(&mut self) -> Result<()> {
-        self.build_stack.push(IRNode::GlobalSection);
-        let base_node = self.stack.first_mut().expect("No base node!");
-        // All of the global statements
-        let stmts: Vec<Box<Stmt>> = self
-            .ast
-            .preblock
-            .iter()
-            .chain(self.ast.postblock.iter())
-            .map(|stmt| (stmt.clone()).clone())
-            .collect();
-
-        let mut stack: Vec<SemNode> = vec![];
-
-        // These checks all depend on the state of the symbol
-        // tables, so I have them in a for loop
-        for stmt in stmts {
-            let node: Node = Node::StmtNode(stmt.clone());
-            let mut sem_node: SemNode =
-                new_sem_node(node.clone(), types::Type::Unknown, 0, false, None);
-            let mut idx: usize = 0;
-            stack.push(sem_node.clone());
-            while !stack.is_empty() && stack.iter().any(|f| !f.get_checked()) {
-                let (new_idx, new_sem_node) = stack
-                    .iter()
-                    .enumerate()
-                    .rev()
-                    .find(|(_, x)| !x.get_checked())
-                    .unwrap();
-
-                idx = new_idx;
-                sem_node = new_sem_node.clone();
-
-                match sem_node.ast_node.clone() {
-                    Node::StmtNode(stmt) => self.check_stmt(&mut stack, idx, (*stmt).clone()),
-                    Node::ExprNode(expr) => self.check_expr(&mut stack, idx, (*expr).clone()),
-                    Node::TermNode(term) => self.check_term(&mut stack, idx, (*term).clone()),
-                    Node::BlockNode(block) => self.check_block(&mut stack, idx, (*block).clone()),
-                    Node::FuncNode(func) => self.check_func(&mut stack, idx, (*func).clone()),
-                    Node::Null => {
-                        self.check_annotation(&mut stack, idx, sem_node.annotation.unwrap().clone())
-                    }
-                    _ => {
-                        println!("node -> {:?}", sem_node.ast_node.clone());
-                        panic!("AST node not yet implemented!")
-                    }
-                };
+    fn binary_op(&mut self, operator: TypedExpr) -> Result<(), BuildIRError> {
+        // Resolve the signature of the function that should be added in the IR
+        let resolved_func = match operator.expr {
+            Expr::Add(mut lhs, mut rhs) => {
+                self.visit_expr(&mut lhs)?;
+                self.visit_expr(&mut rhs)?;
+                ir::Func::Add(ir::new_sig(
+                    "Add",
+                    vec![lhs.type_t.clone(), rhs.type_t.clone()],
+                    operator.type_t,
+                ))
             }
-        }
-        self.build_stack.push(IRNode::EndGlobalSection);
-        Ok(())
-    }
-
-    fn check_program(&mut self) -> Result<()> {
-        let mut stack: Vec<SemNode> = vec![];
-        let program = self.ast.program.clone();
-        stack.push(new_sem_node(
-            Node::ProgramNode(program.clone()),
-            Type::Program(types::ProgramType { with_t: vec![] }),
-            0,
-            false,
-            None,
-        ));
-        let block = match (*program).clone() {
-            Program::NoWith(_, block) => block,
-            Program::With(_, _, block) => block,
+            Expr::Sub(mut lhs, mut rhs) => {
+                self.visit_expr(&mut lhs)?;
+                self.visit_expr(&mut rhs)?;
+                ir::Func::Sub(ir::new_sig(
+                    "Sub",
+                    vec![lhs.type_t.clone(), rhs.type_t.clone()],
+                    operator.type_t,
+                ))
+            }
+            Expr::Mult(mut lhs, mut rhs) => {
+                self.visit_expr(&mut lhs)?;
+                self.visit_expr(&mut rhs)?;
+                ir::Func::Mult(ir::new_sig(
+                    "Mult",
+                    vec![lhs.type_t.clone(), rhs.type_t.clone()],
+                    operator.type_t,
+                ))
+            }
+            Expr::Div(mut lhs, mut rhs) => {
+                self.visit_expr(&mut lhs)?;
+                self.visit_expr(&mut rhs)?;
+                ir::Func::Div(ir::new_sig(
+                    "Div",
+                    vec![lhs.type_t.clone(), rhs.type_t.clone()],
+                    operator.type_t,
+                ))
+            }
+            Expr::Eq(mut lhs, mut rhs) => {
+                self.visit_expr(&mut lhs)?;
+                self.visit_expr(&mut rhs)?;
+                ir::Func::Eq(ir::new_sig(
+                    "Eq",
+                    vec![lhs.type_t.clone(), rhs.type_t.clone()],
+                    operator.type_t,
+                ))
+            }
+            Expr::Neq(mut lhs, mut rhs) => {
+                self.visit_expr(&mut lhs)?;
+                self.visit_expr(&mut rhs)?;
+                ir::Func::Neq(ir::new_sig(
+                    "Neq",
+                    vec![lhs.type_t.clone(), rhs.type_t.clone()],
+                    operator.type_t,
+                ))
+            }
+            Expr::Leq(mut lhs, mut rhs) => {
+                self.visit_expr(&mut lhs)?;
+                self.visit_expr(&mut rhs)?;
+                ir::Func::Leq(ir::new_sig(
+                    "Leq",
+                    vec![lhs.type_t.clone(), rhs.type_t.clone()],
+                    operator.type_t,
+                ))
+            }
+            Expr::Geq(mut lhs, mut rhs) => {
+                self.visit_expr(&mut lhs)?;
+                self.visit_expr(&mut rhs)?;
+                ir::Func::Geq(ir::new_sig(
+                    "Geq",
+                    vec![lhs.type_t.clone(), rhs.type_t.clone()],
+                    operator.type_t,
+                ))
+            }
+            Expr::LessThan(mut lhs, mut rhs) => {
+                self.visit_expr(&mut lhs)?;
+                self.visit_expr(&mut rhs)?;
+                ir::Func::Lt(ir::new_sig(
+                    "Lt",
+                    vec![lhs.type_t.clone(), rhs.type_t.clone()],
+                    operator.type_t,
+                ))
+            }
+            Expr::GreaterThan(mut lhs, mut rhs) => {
+                self.visit_expr(&mut lhs)?;
+                self.visit_expr(&mut rhs)?;
+                ir::Func::Gt(ir::new_sig(
+                    "Gt",
+                    vec![lhs.type_t.clone(), rhs.type_t.clone()],
+                    operator.type_t,
+                ))
+            }
+            _ => panic!("Not sure how to represent {:?} in IR!", operator),
         };
-        let node: Node = Node::BlockNode(block.into());
-        let mut sem_node: SemNode = new_sem_node(
-            node.clone(),
-            types::Type::Unknown,
-            0,
-            false,
-            Some(stack.len() - 1),
-        );
-        let mut idx: usize = 0;
-        self.spush();
-        stack.push(sem_node.clone());
-        while !stack.is_empty() && stack.iter().any(|f| !f.get_checked()) {
-            let (new_idx, new_sem_node) = stack
-                .iter()
-                .enumerate()
-                .rev()
-                .find(|(_, x)| !x.get_checked())
-                .unwrap();
-
-            idx = new_idx;
-            sem_node = new_sem_node.clone();
-            match sem_node.ast_node.clone() {
-                Node::StmtNode(stmt) => self.check_stmt(&mut stack, idx, (*stmt).clone()),
-                Node::ExprNode(expr) => self.check_expr(&mut stack, idx, (*expr).clone()),
-                Node::TermNode(term) => self.check_term(&mut stack, idx, (*term).clone()),
-                Node::BlockNode(block) => self.check_block(&mut stack, idx, (*block).clone()),
-                Node::FuncNode(func) => self.check_func(&mut stack, idx, (*func).clone()),
-                Node::Null => {
-                    self.check_annotation(&mut stack, idx, sem_node.annotation.unwrap().clone())
-                }
-                Node::ProgramNode(prog) => {
-                    stack.pop();
-                    Ok(())
-                }
-                _ => {
-                    println!("node -> {:?}", sem_node.ast_node.clone());
-                    panic!("AST node not yet implemented!")
-                }
-            };
-        }
+        self.build_stack.push(IRNode::Eval(resolved_func));
         Ok(())
     }
 
-    fn check_stmt(&mut self, stack: &mut Vec<SemNode>, node_idx: usize, stmt: Stmt) -> Result<()> {
-        let progress = stack.get_mut(node_idx).unwrap().get_prog();
-        match stmt {
-            Stmt::Assign(symbol, var, expr) => {
-                match progress {
-                    0 => {
-                        stack.get_mut(node_idx).unwrap().set_total(1);
-                        stack.push(new_sem_node(
-                            Node::SymbolNode(symbol),
-                            var.type_t.clone(),
-                            0,
-                            true,
-                            Some(node_idx),
-                        ));
-                        stack.push(new_sem_node(
-                            Node::VarNode(var.clone()),
-                            var.type_t.clone(),
-                            0,
-                            true,
-                            Some(node_idx),
-                        ));
-                        stack.push(new_sem_node(
-                            Node::ExprNode(expr),
-                            types::Type::Unknown,
-                            0,
-                            false,
-                            Some(node_idx),
-                        ));
-                    }
-                    1 => {
-                        // Both sub expressions checked!
-                        let oper1 = stack.get(node_idx + 3).unwrap().get_type();
-                        // Don't increase the parent, because there isn't one right now
-                        let var_node = stack.get(node_idx + 2).unwrap();
-                        let mut var = match var_node.ast_node.clone() {
-                            Node::VarNode(var) => (*var).clone(),
-                            _ => panic!("no var!"),
-                        };
-                        if oper1 != var_node.type_t && var_node.type_t != types::Type::Unknown {
-                            println!(
-                                "declared -> {:?}, expression -> {:?}",
-                                var_node.type_t, oper1
-                            );
-                            panic!("type of expression doesn't match declared type");
-                        }
-                        var.type_t = oper1.clone();
-                        let symbol = match stack.get(node_idx + 1).unwrap().ast_node.clone() {
-                            Node::SymbolNode(symbol) => symbol,
-                            _ => panic!("no symbol!"),
-                        };
-                        stack.get_mut(node_idx).unwrap().set_checked();
-                        stack.get_mut(node_idx).unwrap().set_type(oper1.clone());
-                        self.sinsert(symbol.clone(), var);
-                        self.rebase_stack(stack, node_idx);
-                        self.inc_parent(stack, node_idx);
-                        self.build_stack.push(IRNode::Assign(ir::Assign {
-                            type_t: oper1.clone(),
-                            symbol: symbol.clone(),
-                        }));
-                        stack.pop();
-                    }
-                    other => panic!(
-                        "error: progress={} doesn't match any possible for Stmt::Assign",
-                        other
-                    ),
-                }
+    fn unary_op(&mut self, operator: TypedExpr) -> Result<(), BuildIRError> {
+        // Resolve the signature of the function that should be added in the IR
+        let resolved_func = match operator.expr {
+            Expr::Not(mut u) => {
+                self.visit_expr(&mut u)?;
+                ir::Func::Add(ir::new_sig("Not", vec![u.type_t.clone()], operator.type_t))
             }
-            Stmt::Reassign(symbol, var, assign_op, expr) => {
-                match progress {
-                    0 => {
-                        stack.get_mut(node_idx).unwrap().set_total(1);
-                        stack.push(new_sem_node(
-                            Node::SymbolNode(symbol.clone()),
-                            types::Type::Unknown,
-                            0,
-                            true,
-                            Some(node_idx),
-                        ));
-                        stack.push(new_sem_node(
-                            Node::VarNode(var.clone()),
-                            types::Type::Unknown,
-                            0,
-                            true,
-                            Some(node_idx),
-                        ));
-                        stack.push(new_sem_node(
-                            Node::AssignOpNode(assign_op.clone()),
-                            types::Type::Unknown,
-                            0,
-                            true,
-                            Some(node_idx),
-                        ));
-                        let assign_op_expr = match assign_op {
-                            AssignOp::Assign => expr,
-                            AssignOp::AddAssign => Box::new(Expr::Add(
-                                Box::new(Expr::Term(Box::new(Term::Id(symbol.ident.clone())))),
-                                expr,
-                            )),
-                            AssignOp::SubAssign => Box::new(Expr::Sub(
-                                Box::new(Expr::Term(Box::new(Term::Id(symbol.ident.clone())))),
-                                expr,
-                            )),
-                            AssignOp::MultAssign => Box::new(Expr::Mult(
-                                Box::new(Expr::Term(Box::new(Term::Id(symbol.ident.clone())))),
-                                expr,
-                            )),
-                            AssignOp::DivAssign => Box::new(Expr::Div(
-                                Box::new(Expr::Term(Box::new(Term::Id(symbol.ident.clone())))),
-                                expr,
-                            )),
-                        };
-                        stack.push(new_sem_node(
-                            Node::ExprNode(assign_op_expr.clone()),
-                            types::Type::Unknown,
-                            0,
-                            false,
-                            Some(node_idx),
-                        ));
-                        stack.get_mut(node_idx).unwrap().ast_node = Node::StmtNode(Box::new(
-                            Stmt::Reassign(symbol, var, assign_op, assign_op_expr),
-                        ));
-                    }
-                    1 => {
-                        // Both sub expressions checked!
-                        let oper1 = stack.get(node_idx + 4).unwrap().get_type();
-                        // Later we must also check that the assign_op is defined for the types
-                        let symbol = match stack.get(node_idx + 1).unwrap().ast_node.clone() {
-                            Node::SymbolNode(symbol) => symbol,
-                            other => {
-                                panic!("stack node isn't symbol: {:?}\nstack: {:?}", other, stack)
-                            }
-                        };
-                        let lookup_type = match self.slookup(symbol.clone()) {
-                            Some(var) => var.type_t.clone(),
-                            None => panic!("ident not found!"),
-                        };
-                        if oper1 != lookup_type {
-                            println!("stack: {:?}", stack);
-                            panic!("type error: {:?} == {:?}", oper1, lookup_type);
-                        }
-                        stack.get_mut(node_idx).unwrap().set_checked();
-                        stack.get_mut(node_idx).unwrap().set_type(oper1.clone());
-                        self.rebase_stack(stack, node_idx);
-                        self.inc_parent(stack, node_idx);
-                        self.build_stack.push(IRNode::Reassign(ir::Reassign {
-                            type_t: oper1.clone(),
-                            symbol: symbol.clone(),
-                        }));
-                        stack.pop();
-                    }
-                    other => panic!(
-                        "error: progress={} doesn't match any possible for Stmt::Reassign",
-                        other
-                    ),
-                }
+            Expr::Neg(mut u) => {
+                self.visit_expr(&mut u)?;
+                ir::Func::Add(ir::new_sig("Neg", vec![u.type_t.clone()], operator.type_t))
             }
-            Stmt::If(if_cases) => {
-                let mut total_nodes = if_cases.len() * 2; // A case + block for each
-                if if_cases.last().unwrap().is_else {
-                    total_nodes -= 1;
-                }
-                if progress == 0 {
-                    stack.get_mut(node_idx).unwrap().set_total(total_nodes);
-                    let if_idx = self.get_new_scope();
-                    stack.push(new_annotation(Some(AnnotationNode::EndIf(format!(
-                        "_if_{}",
-                        if_idx
-                    )))));
-                    for (n, if_case) in if_cases.iter().rev().enumerate() {
-                        stack.push(new_sem_node(
-                            Node::BlockNode(if_case.block.clone().into()),
-                            types::Type::Unknown,
-                            0,
-                            false,
-                            Some(node_idx),
-                        ));
-                        stack.push(new_annotation(Some(if n == if_cases.len() - 1 {
-                            AnnotationNode::IfCase(format!("_if_{}", if_idx))
-                        } else if n == 0 && if_case.is_else {
-                            AnnotationNode::ElseCase(format!("_if_{}", if_idx))
-                        } else {
-                            AnnotationNode::ElseIfCase(format!("_if_{}", if_idx))
-                        })));
-                        if !if_case.is_else {
-                            stack.push(new_sem_node(
-                                Node::ExprNode(if_case.condition.clone()),
-                                types::Type::Unknown,
-                                0,
-                                false,
-                                Some(node_idx),
-                            ));
-                        }
-                    }
-                    stack.push(new_annotation(Some(AnnotationNode::If(format!(
-                        "_if_{}",
-                        if_idx
-                    )))));
-                } else if progress == total_nodes {
-                    stack.get_mut(node_idx).unwrap().set_checked();
-                    self.rebase_stack(stack, node_idx);
-                    self.inc_parent(stack, node_idx);
-                    stack.pop();
-                } else {
-                    panic!(
-                        "error: progress={} doesn't match any possible for Stmt::If",
-                        progress
-                    );
-                }
-            }
-            Stmt::Call(symbol, args) => {
-                let num_args = args.len();
-                if progress == 0 {
-                    stack.get_mut(node_idx).unwrap().set_total(num_args);
-                    let func_var = self.slookup(symbol.clone()).unwrap();
-                    let func_type = match func_var.type_t.clone() {
-                        types::Type::Function(func_type) => func_type,
-                        _ => panic!("not a function!"),
-                    };
-                    let param_types = func_type.params_t;
-                    if param_types.len() != args.len() {
-                        panic!("calling function without correct number of parameters");
-                    }
-                    for arg in (*args).clone() {
-                        stack.push(new_sem_node(
-                            Node::ExprNode(arg),
-                            types::Type::Unknown,
-                            0,
-                            false,
-                            Some(node_idx),
-                        ));
-                    }
-                } else if progress == num_args {
-                    let func_var = self.slookup(symbol.clone()).unwrap();
-                    let func_type = match func_var.type_t.clone() {
-                        types::Type::Function(func_type) => func_type,
-                        _ => panic!("not a function!"),
-                    };
-                    let param_types = func_type.params_t;
-                    let mut resolved_types: Vec<Type> = vec![];
-                    while stack.len() - 1 != node_idx {
-                        resolved_types.push(stack.pop().unwrap().get_type());
-                    }
-                    for (arg_type, param_type) in resolved_types.iter().rev().zip(param_types) {
-                        println!(
-                            "{}: {:?} == {:?}",
-                            symbol.ident.clone(),
-                            arg_type,
-                            param_type
-                        );
-                        if param_type != *arg_type {
-                            panic!(
-                                "argument to function {}(...) is incorrect type",
-                                symbol.ident
-                            )
-                        }
-                    }
-                    let return_t = func_type.return_t.first().unwrap().clone();
-                    stack.get_mut(node_idx).unwrap().set_type(return_t);
-                    stack.get_mut(node_idx).unwrap().set_checked();
-                    self.rebase_stack(stack, node_idx);
-                    self.inc_parent(stack, node_idx);
-                    stack.pop();
-                } else {
-                    panic!(
-                        "error: progress={} doesn't match any possible for Stmt::Call",
-                        progress
-                    )
-                }
-            }
-            Stmt::FuncDef(func) => {
-                match progress {
-                    0 => {
-                        stack.get_mut(node_idx).unwrap().set_total(1);
-                        let params = func.params.iter().map(|p| p.type_t.clone()).collect();
-                        let return_t = func.ret_t.clone();
-                        let symbol = new_symbol(func.ident.clone());
-                        let block = func.block.clone();
-                        let function_type = types::Type::Function(types::FunctionType {
-                            params_t: params,
-                            return_t: vec![return_t],
-                            with_t: vec![],
-                        });
-                        self.sinsert(
-                            new_symbol(func.ident.clone()),
-                            new_var(
-                                function_type.clone(),
-                                stack.get(node_idx).unwrap().ast_node.clone(),
-                            ),
-                        );
-                        stack.push(new_sem_node(
-                            Node::FuncNode(func),
-                            function_type,
-                            0,
-                            false,
-                            Some(node_idx),
-                        ));
-                    }
-                    1 => {
-                        // Both sub expressions checked!
-                        let func_type = stack.get(node_idx + 1).unwrap().get_type();
-                        stack.get_mut(node_idx).unwrap().set_checked();
-                        stack.get_mut(node_idx).unwrap().set_type(func_type);
-                        self.rebase_stack(stack, node_idx);
-                        self.inc_parent(stack, node_idx);
-                        stack.pop();
-                    }
-                    other => panic!(
-                        "error: progress={} doesn't match any possible for Stmt::FuncDef",
-                        other
-                    ),
-                }
-            }
-            Stmt::Return(expr) => {
-                match progress {
-                    0 => {
-                        stack.get_mut(node_idx).unwrap().set_total(1);
-                        stack.push(new_sem_node(
-                            Node::ExprNode(expr),
-                            types::Type::Unknown,
-                            0,
-                            false,
-                            Some(node_idx),
-                        ));
-                    }
-                    1 => {
-                        // Nothing to check just yet
-                        stack.get_mut(node_idx).unwrap().set_checked();
-                        self.rebase_stack(stack, node_idx);
-                        self.inc_parent(stack, node_idx);
-                        self.build_stack.push(IRNode::Return);
-                        stack.pop();
-                    }
-                    other => panic!(
-                        "error: progress={} doesn't match any possible for Stmt::Return",
-                        other
-                    ),
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    fn check_expr(&mut self, stack: &mut Vec<SemNode>, node_idx: usize, expr: Expr) -> Result<()> {
-        let progress = stack.get_mut(node_idx).unwrap().get_prog();
-        match expr.clone() {
-            Expr::Add(lhs, rhs) => {
-                self.binary_op(stack, node_idx, progress, expr.clone(), lhs, rhs);
-            }
-            Expr::Sub(lhs, rhs) => {
-                self.binary_op(stack, node_idx, progress, expr.clone(), lhs, rhs);
-            }
-            Expr::Mult(lhs, rhs) => {
-                self.binary_op(stack, node_idx, progress, expr.clone(), lhs, rhs);
-            }
-            Expr::Div(lhs, rhs) => {
-                self.binary_op(stack, node_idx, progress, expr.clone(), lhs, rhs);
-            }
-            Expr::Eq(lhs, rhs) => {
-                self.binary_op(stack, node_idx, progress, expr.clone(), lhs, rhs);
-            }
-            Expr::Neq(lhs, rhs) => {
-                self.binary_op(stack, node_idx, progress, expr.clone(), lhs, rhs);
-            }
-            Expr::Leq(lhs, rhs) => {
-                self.binary_op(stack, node_idx, progress, expr.clone(), lhs, rhs);
-            }
-            Expr::Geq(lhs, rhs) => {
-                self.binary_op(stack, node_idx, progress, expr.clone(), lhs, rhs);
-            }
-            Expr::LessThan(lhs, rhs) => {
-                self.binary_op(stack, node_idx, progress, expr.clone(), lhs, rhs);
-            }
-            Expr::GreaterThan(lhs, rhs) => {
-                self.binary_op(stack, node_idx, progress, expr.clone(), lhs, rhs);
-            }
-            Expr::Term(term) => {
-                match progress {
-                    0 => {
-                        stack.get_mut(node_idx).unwrap().set_total(1);
-                        stack.push(new_sem_node(
-                            Node::TermNode(term),
-                            types::Type::Unknown,
-                            0,
-                            false,
-                            Some(node_idx),
-                        ));
-                    }
-                    1 => {
-                        // Term is complete
-                        let oper1 = stack.get(node_idx + 1).unwrap().get_type();
-                        stack.get_mut(node_idx).unwrap().set_checked();
-                        stack.get_mut(node_idx).unwrap().set_type(oper1);
-                        // Increment progress of parent
-                        self.inc_parent(stack, node_idx);
-                    }
-                    other => panic!(
-                        "error: progress={} doesn't match any possible for Expr::Term",
-                        other
-                    ),
-                }
-            }
-            Expr::Call(symbol, args) => {
-                let num_args = args.len();
-                if progress == 0 {
-                    let func_var = self.slookup(symbol.clone()).unwrap();
-                    let func_type = match func_var.type_t.clone() {
-                        types::Type::Function(func_type) => func_type,
-                        _ => panic!("not a function!"),
-                    };
-                    let param_types = func_type.params_t;
-                    if param_types.len() != args.len() {
-                        panic!("calling function without correct number of parameters");
-                    }
-                    for arg in (*args).clone() {
-                        stack.push(new_sem_node(
-                            Node::ExprNode(arg),
-                            types::Type::Unknown,
-                            0,
-                            false,
-                            Some(node_idx),
-                        ));
-                    }
-                } else if progress == num_args {
-                    let func_var = self.slookup(symbol.clone()).unwrap();
-                    let func_type = match func_var.type_t.clone() {
-                        types::Type::Function(func_type) => func_type,
-                        _ => panic!("not a function!"),
-                    };
-                    let param_types = func_type.params_t;
-                    let mut resolved_types: Vec<Type> = vec![];
-                    while stack.len() - 1 != node_idx {
-                        resolved_types.push(stack.pop().unwrap().get_type());
-                    }
-                    let mut resolved_param_types = vec![];
-                    for (arg_type, param_type) in resolved_types.iter().rev().zip(param_types) {
-                        println!(
-                            "{}: {:?} == {:?}",
-                            symbol.ident.clone(),
-                            arg_type,
-                            param_type
-                        );
-                        if param_type != *arg_type {
-                            panic!(
-                                "argument to function {}(...) is incorrect type",
-                                symbol.ident.clone()
-                            )
-                        }
-                        resolved_param_types.push(arg_type.clone());
-                    }
-                    let return_t = func_type.return_t.first().unwrap().clone();
-                    stack.get_mut(node_idx).unwrap().set_type(return_t.clone());
-                    stack.get_mut(node_idx).unwrap().set_checked();
-                    self.inc_parent(stack, node_idx);
-                    stack.push(new_annotation(Some(AnnotationNode::Eval(ir::Func::Func(
-                        Signature {
-                            symbol,
-                            params_t: resolved_param_types,
-                            return_t,
-                        },
-                    )))));
-                } else {
-                    panic!(
-                        "error: progress={} doesn't match any possible for Expr::Call",
-                        progress
-                    );
-                }
-            }
-        }
-        Ok(())
-    }
-
-    fn check_term(&mut self, stack: &mut Vec<SemNode>, node_idx: usize, term: Term) -> Result<()> {
-        let progress = stack.get_mut(node_idx).unwrap().get_prog();
-        match term {
-            Term::Id(ident) => {
-                stack.get_mut(node_idx).unwrap().set_total(0);
-                // Lookup type of identifier
-                let lookup_type = match self.slookup(new_symbol(ident.clone())) {
-                    Some(var) => var.type_t.clone(),
-                    None => panic!("ident not found! -> {:?}", ident),
-                };
-
-                stack.get_mut(node_idx).unwrap().set_checked();
-                stack
-                    .get_mut(node_idx)
-                    .unwrap()
-                    .set_type(lookup_type.clone());
-                // Increment progress of parent
-                self.inc_parent(stack, node_idx);
-                self.build_stack.push(IRNode::Term(ir::Term {
-                    type_t: lookup_type,
-                    value: ir::Value::Id(ident),
-                }));
-            }
-            Term::Num(num) => {
-                stack.get_mut(node_idx).unwrap().set_total(0);
-                stack.get_mut(node_idx).unwrap().set_checked();
-                stack
-                    .get_mut(node_idx)
-                    .unwrap()
-                    .set_type(types::Type::Int32);
-                // Increment progress of parent
-                self.inc_parent(stack, node_idx);
-                self.build_stack.push(IRNode::Term(ir::Term {
-                    type_t: types::Type::Int32,
-                    value: ir::Value::Int32(num),
-                }));
-            }
-            Term::Bool(bool_value) => {
-                stack.get_mut(node_idx).unwrap().set_total(0);
-                stack.get_mut(node_idx).unwrap().set_checked();
-                stack.get_mut(node_idx).unwrap().set_type(types::Type::Bool);
-                // Increment progress of parent
-                self.inc_parent(stack, node_idx);
-                self.build_stack.push(IRNode::Term(ir::Term {
-                    type_t: types::Type::Bool,
-                    value: ir::Value::Bool(bool_value),
-                }));
-            }
-            Term::Expr(expr) => {
-                match progress {
-                    0 => {
-                        stack.get_mut(node_idx).unwrap().set_total(1);
-                        stack.push(new_sem_node(
-                            Node::ExprNode(expr),
-                            types::Type::Unknown,
-                            0,
-                            false,
-                            Some(node_idx),
-                        ));
-                    }
-                    1 => {
-                        // Both sub expressions checked!
-                        let oper1 = stack.get(node_idx + 1).unwrap().get_type();
-                        stack.get_mut(node_idx).unwrap().set_checked();
-                        stack.get_mut(node_idx).unwrap().set_type(oper1);
-                        // Increment progress of parent
-                        self.inc_parent(stack, node_idx);
-                    }
-                    other => panic!(
-                        "error: progress={} doesn't match any possible for Term::Expr",
-                        other
-                    ),
-                }
-            }
-        }
-        Ok(())
-    }
-
-    fn check_block(
-        &mut self,
-        stack: &mut Vec<SemNode>,
-        node_idx: usize,
-        block: Block,
-    ) -> Result<()> {
-        let progress = stack.get_mut(node_idx).unwrap().get_prog();
-        let num_stmts = block.len();
-        if progress == 0 {
-            self.rebase_stack(stack, node_idx);
-            self.spush();
-            stack.get_mut(node_idx).unwrap().set_total(num_stmts);
-            for stmt in block.iter().rev() {
-                stack.push(new_sem_node(
-                    Node::StmtNode(stmt.clone()),
-                    types::Type::Unknown,
-                    0,
-                    false,
-                    Some(node_idx),
-                ));
-            }
-        } else if progress == num_stmts {
-            self.rebase_stack(stack, node_idx);
-            stack.get_mut(node_idx).unwrap().set_checked();
-            let found_symbols = self.spop().unwrap().clone();
-            attach_symbols_parent(stack, node_idx, found_symbols);
-            // Increment progress of parent
-            self.inc_parent(stack, node_idx);
-            stack.pop();
-        } else {
-            panic!(
-                "error: progress={} doesn't match any possible for block",
-                progress
-            );
-        }
-        Ok(())
-    }
-
-    fn check_func(&mut self, stack: &mut Vec<SemNode>, node_idx: usize, func: Func) -> Result<()> {
-        let progress = stack.get_mut(node_idx).unwrap().get_prog();
-        match progress {
-            0 => {
-                stack.get_mut(node_idx).unwrap().set_total(1);
-                let block = func.block;
-                self.spush();
-                let params = func.params;
-                let mut params_t = vec![];
-                for param in params.clone() {
-                    let param_type = param.type_t.clone();
-                    params_t.push((param.ident.clone(), param_type.clone()));
-                    let symbol = new_symbol(param.ident.clone());
-                    let var = new_var(param_type, Node::SymbolNode(symbol.clone()));
-                    self.sinsert(symbol, var);
-                }
-                let func_scope_num = self.get_new_scope();
-                let func_label = format!("_func_def_{}", func_scope_num);
-                stack.push(new_annotation(Some(AnnotationNode::EndFuncDef(
-                    func_label.clone(),
-                ))));
-                stack.push(new_sem_node(
-                    Node::BlockNode(block.into()),
-                    types::Type::Unknown,
-                    0,
-                    false,
-                    Some(node_idx),
-                ));
-                stack.push(new_annotation(Some(AnnotationNode::FuncDef(
-                    ir::FuncDef {
-                        symbol: new_symbol(func.ident.clone()),
-                        params_t,
-                        return_t: func.ret_t,
-                    },
-                    func_label,
-                ))));
-            }
-            1 => {
-                // Both sub expressions checked!
-                stack.get_mut(node_idx).unwrap().set_checked();
-                stack.get_mut(node_idx).unwrap().add_symbols(self.spop());
-                // Increment progress of parent
-                self.inc_parent(stack, node_idx);
-                self.build_stack.push(IRNode::Assign(ir::Assign {
-                    symbol: new_symbol(func.ident),
-                    type_t: Type::Function(types::FunctionType {
-                        params_t: func
-                            .params
-                            .into_iter()
-                            .map(|p| (*p).clone().type_t)
-                            .collect(),
-                        return_t: vec![func.ret_t],
-                        with_t: vec![],
-                    }),
-                }));
-            }
-            other => panic!(
-                "error: progress={} doesn't match any possible for func",
-                other
-            ),
-        }
-        Ok(())
-    }
-
-    fn binary_op(
-        &mut self,
-        stack: &mut Vec<SemNode>,
-        node_idx: usize,
-        progress: usize,
-        operator: Expr,
-        lhs: Box<Expr>,
-        rhs: Box<Expr>,
-    ) -> Result<()> {
-        match progress {
-            0 => {
-                stack.get_mut(node_idx).unwrap().set_total(2);
-                stack.push(new_sem_node(
-                    Node::ExprNode(rhs),
-                    types::Type::Unknown,
-                    0,
-                    false,
-                    Some(node_idx),
-                ));
-            }
-            1 => {
-                stack.push(new_sem_node(
-                    Node::ExprNode(lhs),
-                    types::Type::Unknown,
-                    0,
-                    false,
-                    Some(node_idx),
-                ));
-            }
-            2 => {
-                // Both sub expressions checked!
-                let oper1 = stack.get(node_idx + 1).unwrap().get_type();
-                let oper2 = stack.get(node_idx + 2).unwrap().get_type();
-                if oper1 != oper2 {
-                    println!("{:?}", stack);
-                    println!("lhs: {:?}", stack.get(node_idx + 1).unwrap());
-                    println!("rhs: {:?}", stack.get(node_idx + 2).unwrap());
-                    panic!("type error: {:?}({:?}, {:?})", operator, oper1, oper2);
-                }
-                stack.get_mut(node_idx).unwrap().set_checked();
-                stack.get_mut(node_idx).unwrap().set_type(oper1.clone());
-                // Increment progress of parent
-                self.inc_parent(stack, node_idx);
-                // Resolve the signature of the function that should be added in the IR
-                let resolved_func = match operator.clone() {
-                    Expr::Add(_, _) => ir::Func::Add(ir::new_sig(
-                        "Add",
-                        vec![oper1.clone(), oper2.clone()],
-                        oper1.clone(),
-                    )),
-                    Expr::Sub(_, _) => ir::Func::Sub(ir::new_sig(
-                        "Sub",
-                        vec![oper1.clone(), oper2.clone()],
-                        oper1.clone(),
-                    )),
-                    Expr::Mult(_, _) => ir::Func::Mult(ir::new_sig(
-                        "Mult",
-                        vec![oper1.clone(), oper2.clone()],
-                        oper1.clone(),
-                    )),
-                    Expr::Div(_, _) => ir::Func::Div(ir::new_sig(
-                        "Div",
-                        vec![oper1.clone(), oper2.clone()],
-                        oper1.clone(),
-                    )),
-                    Expr::Eq(_, _) => ir::Func::Eq(ir::new_sig(
-                        "Eq",
-                        vec![oper1.clone(), oper2.clone()],
-                        oper1.clone(),
-                    )),
-                    Expr::Neq(_, _) => ir::Func::Neq(ir::new_sig(
-                        "Neq",
-                        vec![oper1.clone(), oper2.clone()],
-                        oper1.clone(),
-                    )),
-                    Expr::Leq(_, _) => ir::Func::Leq(ir::new_sig(
-                        "Leq",
-                        vec![oper1.clone(), oper2.clone()],
-                        oper1.clone(),
-                    )),
-                    Expr::Geq(_, _) => ir::Func::Geq(ir::new_sig(
-                        "Geq",
-                        vec![oper1.clone(), oper2.clone()],
-                        oper1.clone(),
-                    )),
-                    Expr::LessThan(_, _) => ir::Func::Lt(ir::new_sig(
-                        "Lt",
-                        vec![oper1.clone(), oper2.clone()],
-                        oper1.clone(),
-                    )),
-                    Expr::GreaterThan(_, _) => ir::Func::Gt(ir::new_sig(
-                        "Gt",
-                        vec![oper1.clone(), oper2.clone()],
-                        oper1.clone(),
-                    )),
-                    _ => panic!("Not sure how to represent {:?} in IR!", operator),
-                };
-                self.build_stack.push(IRNode::Eval(resolved_func));
-            }
-            other => panic!(
-                "error: progress={} doesn't match any possible for {:?}",
-                other, operator
-            ),
-        }
-        Ok(())
-    }
-
-    fn check_annotation(
-        &mut self,
-        stack: &mut Vec<SemNode>,
-        node_idx: usize,
-        annotation: AnnotationNode,
-    ) -> Result<()> {
-        stack.get_mut(node_idx).unwrap().inc_prog();
-        stack.get_mut(node_idx).unwrap().set_checked();
-        match annotation {
-            AnnotationNode::Label(label) => {
-                self.ins_label(label);
-            }
-            AnnotationNode::If(if_label) => {
-                self.build_stack.push(IRNode::If(if_label));
-            }
-            AnnotationNode::IfCase(if_label) => {
-                self.build_stack.push(IRNode::IfCase(if_label));
-            }
-            AnnotationNode::ElseIfCase(if_label) => {
-                self.build_stack.push(IRNode::ElseIfCase(if_label));
-            }
-            AnnotationNode::ElseCase(if_label) => {
-                self.build_stack.push(IRNode::ElseCase(if_label));
-            }
-            AnnotationNode::EndIf(if_label) => {
-                self.build_stack.push(IRNode::EndIf(if_label));
-            }
-            AnnotationNode::FuncDef(signature, func_label) => {
-                self.build_stack
-                    .push(IRNode::FuncDef(signature, func_label));
-            }
-            AnnotationNode::EndFuncDef(func_label) => {
-                self.build_stack.push(IRNode::EndFuncDef(func_label));
-            }
-            AnnotationNode::Eval(func) => {
-                self.build_stack.push(IRNode::Eval(func));
-            }
-        }
-        stack.pop();
-        Ok(())
-    }
-
-    fn rebase_stack(&mut self, stack: &mut Vec<SemNode>, node_idx: usize) -> Result<()> {
-        if stack.len() - 1 == node_idx {
-            Ok(())
-        } else {
-            while stack.len() - 1 != node_idx {
-                stack.pop();
-            }
-            Ok(())
-        }
-    }
-
-    fn inc_parent(&self, stack: &mut Vec<SemNode>, node_idx: usize) {
-        match stack.get(node_idx).unwrap().parent {
-            Some(parent) => stack.get_mut(parent).unwrap().inc_prog(),
-            None => (),
+            _ => panic!("Not sure how to represent {:?} in IR!", operator),
         };
+        self.build_stack.push(IRNode::Eval(resolved_func));
+        Ok(())
     }
 
     fn ins_label(&mut self, label: String) {
         self.build_stack.push(IRNode::Label(ir::Label(label)));
     }
-}
-
-fn attach_symbols_parent(stack: &mut Vec<SemNode>, node_idx: usize, symbols: SymbolTable) {
-    match stack.get(node_idx).unwrap().parent {
-        Some(parent) => stack.get_mut(parent).unwrap().add_symbols(Some(symbols)),
-        None => eprintln!("no parent node to attach symbols to"),
-    };
 }

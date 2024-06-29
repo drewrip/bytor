@@ -1,0 +1,4 @@
+program test_program
+    let x: int32 = -2;
+    return x;
+end

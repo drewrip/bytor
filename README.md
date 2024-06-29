@@ -14,7 +14,7 @@ This is an incredibly simple example of calculating the `n`'th Fibonacci sequenc
 Currently the only way to observe output is via the return code of the program.
 
 ```
-function fib(n: int32) -> int32
+fun fib(n: int32) -> int32
     if n == 0 then
         return 0;
     else if n == 1 then
