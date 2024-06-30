@@ -1,10 +1,12 @@
 use std::{
     fs::{self, File},
     io::Write,
+    path::Path,
 };
 
 use clap::{Parser, ValueEnum};
 use lalrpop_util::lalrpop_mod;
+use thiserror::Error;
 
 pub mod ast;
 pub mod backends;
@@ -19,7 +21,6 @@ pub mod types;
 use backends::{c::CGenContext, wasm::WasmGenContext};
 use codegen::CodeGen;
 use semantic::ProgramState;
-
 
 /// Compiler for the Rascal language
 #[derive(Parser, Debug)]
@@ -59,7 +60,14 @@ enum EmitArgs {
 
 lalrpop_mod!(pub rascal);
 
-fn main() {
+#[derive(Error, Debug)]
+pub enum BuildError {
+    #[error("There was an issue with the input file: {0}")]
+    Input(String),
+    #[error("There was a problem creating the output: {0}")]
+    Output(String),
+}
+fn main() -> Result<(), BuildError> {
     let args = Args::parse();
     let save_c: bool;
     let save_ir: bool;
@@ -69,40 +77,59 @@ fn main() {
     } else {
         (save_c, save_ir) = (false, false);
     }
-    let src_file = fs::read_to_string(args.infile).expect("ERROR: couldn't find source file");
-    let mut root = rascal::RootParser::new().parse(&src_file).unwrap();
+    let src_file =
+        fs::read_to_string(&args.infile).map_err(|err| BuildError::Input(err.to_string()))?;
+    let file_extension = Path::new(&args.infile)
+        .extension()
+        .ok_or(BuildError::Input("Problem with filename".to_string()))?;
+    let build_stack = if file_extension == "ir" {
+        serde_json::from_str(&src_file).map_err(|err| BuildError::Input(err.to_string()))?
+    } else {
+        let mut root = rascal::RootParser::new()
+            .parse(&src_file)
+            .map_err(|err| BuildError::Input(err.to_string()))?;
 
-    let mut typing_state = infer::TypingState::new();
-    let _tv_typing_result = typing_state
-        .augment(&mut root)
-        .expect("Couldn't replace unknown types with TypeVar's");
-    let mut infer_state = infer::InferState::new();
-    let _constraint_gen_result = infer_state
-        .constrain(&mut root)
-        .expect("Couldn't add contraints");
-    let _resolve_result = infer_state.resolve().expect("Couldn't resolve types");
-    let mut sub_state = infer::SubState::new(infer_state.get_type_mapping());
-    let _sub_gen_result = sub_state.substitute(&mut root);
+        let mut typing_state = infer::TypingState::new();
+        typing_state
+            .augment(&mut root)
+            .map_err(|err| BuildError::Output(err.to_string()))?;
+        let mut infer_state = infer::InferState::new();
+        infer_state
+            .constrain(&mut root)
+            .map_err(|err| BuildError::Output(err.to_string()))?;
+        infer_state
+            .resolve()
+            .map_err(|err| BuildError::Output(err.to_string()))?;
+        let mut sub_state = infer::SubState::new(infer_state.get_type_mapping());
+        let _sub_gen_result = sub_state.substitute(&mut root);
 
-    // Perform semantic checks and type checking
-    let mut state = semantic::ProgramState::new(root.clone());
-    state.build_ir().expect("couldn't generate IR");
+        // Perform semantic checks and type checking
+        let mut state = semantic::ProgramState::new(root.clone());
+        state
+            .build_ir()
+            .map_err(|err| BuildError::Output(err.to_string()))?;
 
-    if save_ir {
-        let serialized_ir = serde_json::to_string(&state.build_stack).expect("Serialization error");
-        let mut file =
-            File::create(ProgramState::IR_OUTPUT_FILENAME).expect("Cannot create IR file");
-        write!(&mut file, "{serialized_ir}").expect("Cannot write to IR file");
-    }
+        if save_ir {
+            let serialized_ir = serde_json::to_string(&state.build_stack)
+                .map_err(|err| BuildError::Output(err.to_string()))?;
+            let mut file = File::create(ProgramState::IR_OUTPUT_FILENAME)
+                .map_err(|err| BuildError::Output(err.to_string()))?;
+            write!(&mut file, "{serialized_ir}")
+                .map_err(|err| BuildError::Output(err.to_string()))?;
+        }
+        state.build_stack
+    };
 
     // Generate code
-    let ctx = codegen::new(state.build_stack, args.outfile, args.skip_validation);
+    let ctx = codegen::new(build_stack, args.outfile, args.skip_validation);
     let build_result = match args.backend {
         BackendArgs::C => CGenContext::from(ctx).gen(),
         BackendArgs::WASM => WasmGenContext::from(ctx).gen(),
     };
     if !save_c {
-        fs::remove_file(CGenContext::C_OUTPUT_FILENAME).expect("Unable to delete C output file");
+        fs::remove_file(CGenContext::C_OUTPUT_FILENAME)
+            .map_err(|_| BuildError::Output("Cannot delete C output file".to_string()))?;
     }
-    build_result.expect("Build failed!");
+    build_result.map_err(|err| BuildError::Output(err.to_string()))?;
+    Ok(())
 }
