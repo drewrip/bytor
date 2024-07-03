@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
 use crate::ast::{
-    AssignOp, Block, Expr, Func, IfCases, Node, Program, Root, Stmt, Term, TypedExpr, TypedTerm,
+    AssignOp, Block, Expr, Func, IfCases, LambdaFunc, Node, Program, Root, Stmt, Term, TypedExpr,
+    TypedTerm,
 };
 use crate::ir::{self, IRNode};
 use crate::symbol::{new_symbol, new_var, IdentMapping, Symbol, Symbolic, Var};
@@ -293,6 +294,40 @@ impl Traverse for ProgramState {
             func_ir_id.clone(),
         ));
         self.visit_block(&mut func.block)?;
+        self.build_stack.push(IRNode::EndFuncDef(func_ir_id));
+        Ok(())
+    }
+
+    fn visit_lambda_func(&mut self, lf: &mut LambdaFunc) -> Result<(), Self::Error> {
+        let func_ir_num = self.get_new_scope();
+        let func_ir_id = format!("_func_def_{}", func_ir_num);
+        let return_type = lf.return_t.clone();
+        let param_types: Vec<Type> = lf.params.iter().map(|p| p.type_t.clone()).collect();
+        let func_symbol = new_symbol(format!("_anon_func_{}", func_ir_num));
+        sinsert(
+            &mut self.stack,
+            func_symbol.clone(),
+            new_var(
+                Type::Function(types::FunctionType {
+                    params_t: param_types.clone(),
+                    return_t: Box::new(return_type.clone()),
+                }),
+                Node::Null,
+            ),
+        );
+        self.build_stack.push(IRNode::FuncDef(
+            ir::FuncDef {
+                symbol: func_symbol,
+                return_t: return_type.clone(),
+                params_t: lf
+                    .params
+                    .iter()
+                    .map(|p| (p.ident.clone(), p.type_t.clone()))
+                    .collect(),
+            },
+            func_ir_id.clone(),
+        ));
+        self.visit_block(&mut lf.block)?;
         self.build_stack.push(IRNode::EndFuncDef(func_ir_id));
         Ok(())
     }
