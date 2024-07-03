@@ -66,6 +66,7 @@ pub struct CGenContext {
     global_idx: usize,
     type_counter: usize,
     type_map: HashMap<types::Type, String>,
+    func_name_map: HashMap<String, String>,
 }
 
 impl From<CodeGenContext> for CGenContext {
@@ -78,15 +79,13 @@ impl From<CodeGenContext> for CGenContext {
             global_idx: 0,
             type_counter: 0,
             type_map: HashMap::new(),
+            func_name_map: HashMap::new(),
         }
     }
 }
 
 impl CodeGen for CGenContext {
     fn gen(&mut self) -> Result<(), CodeGenError> {
-        for n in self.build_stack.clone() {
-            println!("- {:?}", n);
-        }
         self.gen_includes();
         self.save_global_idx();
         let start = self.gen_globals();
@@ -193,7 +192,7 @@ impl CGenContext {
             .find(|(_, ir_node)| matches!(ir_node, IRNode::EndGlobalSection))
             .unwrap()
             .0;
-        self.gen_code(idx, end_of_globals) + 2
+        self.gen_code(idx, end_of_globals) + 1
     }
 
     fn gen_program(&mut self, idx: usize) -> usize {
@@ -221,7 +220,11 @@ impl CGenContext {
                 IRNode::ElseCase(_) => self.gen_else_case(node_idx).unwrap(),
                 IRNode::EndIf(_) => self.gen_end_if(node_idx).unwrap(),
                 // Function Definitions
-                IRNode::FuncDef(def, _) => self.gen_func_def(node_idx, def.clone()).unwrap(),
+                IRNode::FuncDef(def, scope_id) => {
+                    self.func_name_map
+                        .insert(scope_id.clone(), def.symbol.ident.clone());
+                    self.gen_func_def(node_idx, def.clone()).unwrap()
+                }
                 IRNode::EndFuncDef(_) => self.gen_end_func_def(node_idx).unwrap(),
                 // Return
                 IRNode::Return => self.gen_return(node_idx).unwrap(),
@@ -252,16 +255,19 @@ impl CGenContext {
     }
 
     fn gen_assign(&mut self, idx: usize, assign: ir::Assign) -> Result<usize, CodeGenError> {
-        if !(matches_variant!(assign.type_t, Type::Function)
-            && matches_variant!(self.build_stack.get(idx - 1).unwrap(), IRNode::EndFuncDef))
-        {
-            let assignment_type = &self.translate_type(assign.type_t);
-            self.add_code(assignment_type);
-            self.add_code(&assign.symbol.ident.clone());
-            self.add_code("=");
-            self.gen_expr(idx - 1);
-            self.add_code(";");
-        }
+        let assignment_type = &self.translate_type(assign.type_t);
+        self.add_code(assignment_type);
+        self.add_code(&assign.symbol.ident.clone());
+        self.add_code("=");
+        match self.build_stack.get(idx - 1).unwrap() {
+            IRNode::EndFuncDef(scope_id) => {
+                self.add_code(&self.func_name_map.get(scope_id).unwrap().clone());
+            }
+            _ => {
+                self.gen_expr(idx - 1);
+            }
+        };
+        self.add_code(";");
         Ok(idx + 1)
     }
 

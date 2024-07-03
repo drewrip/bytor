@@ -103,7 +103,6 @@ fn main() -> Result<(), BuildError> {
         let mut sub_state = infer::SubState::new(infer_state.get_type_mapping());
         let _sub_gen_result = sub_state.substitute(&mut root);
 
-        // Perform semantic checks and type checking
         let mut state = semantic::ProgramState::new(root.clone());
         state
             .build_ir()

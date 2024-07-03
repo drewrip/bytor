@@ -17,6 +17,8 @@ pub enum TypeError {
     DeriveNumType(String),
     #[error("Couldn't perform substitution: {0}")]
     SubstitutionError(String),
+    #[error("The types in the program could not be fully infered: {0}")]
+    UndeterminedVariables(String),
 }
 
 #[derive(Debug, Clone)]
@@ -534,11 +536,11 @@ impl Traverse for InferState {
             }
             Expr::LambdaFunc(ref mut lf) => {
                 self.spush();
-                self.surrounding_func_types
-                    .push(Type::Function(FunctionType {
-                        params_t: lf.params.iter().map(|p| p.type_t.clone()).collect(),
-                        return_t: Box::new(lf.return_t.clone()),
-                    }));
+                let func_type = Type::Function(FunctionType {
+                    params_t: lf.params.iter().map(|p| p.type_t.clone()).collect(),
+                    return_t: Box::new(lf.return_t.clone()),
+                });
+                self.surrounding_func_types.push(func_type.clone());
                 for param in lf.params.clone() {
                     let Param { type_t, ident } = *param;
                     sinsert(
@@ -548,6 +550,8 @@ impl Traverse for InferState {
                     );
                 }
                 self.visit_block(&mut lf.block)?;
+                self.constraints
+                    .push(Constraint::Eq(func_type.clone(), expr.type_t.clone()));
                 self.surrounding_func_types.pop();
                 self.spop();
             }
@@ -858,6 +862,49 @@ impl InferState {
         self.visit_root(root)
     }
 
+    fn type_is_determined(t: Type) -> bool {
+        match t.clone() {
+            Type::TypeVar(_) => false,
+            Type::Function(func) => !func
+                .params_t
+                .iter()
+                .chain(vec![*func.return_t.clone()].iter())
+                .any(|t| !Self::type_is_determined(t.clone())),
+            _ => true,
+        }
+    }
+
+    pub fn is_fully_determined(&mut self) -> Result<(), TypeError> {
+        for (t1, t2) in self.type_mapping.clone().iter() {
+            match (t1.clone(), t2.clone()) {
+                (Type::TypeVar(tv1), Type::TypeVar(_)) => {
+                    Err(TypeError::UndeterminedVariables(format!(
+                        "TypeVar({}) left undetermined: {:?} -> {:?}",
+                        tv1,
+                        t1.clone(),
+                        t2.clone()
+                    )))
+                }
+                (Type::TypeVar(_), mapped_t) => {
+                    if Self::type_is_determined(mapped_t) {
+                        Ok(())
+                    } else {
+                        Err(TypeError::UndeterminedVariables(format!(
+                            "Type mapped onto is not fully determined: {:?} -> {:?}",
+                            t1.clone(),
+                            t2.clone()
+                        )))
+                    }
+                }
+                (other_t1, other_t2) => Err(TypeError::UndeterminedVariables(format!(
+                    "Mapping between non-variables: {:?} -> {:?}",
+                    other_t1, other_t2,
+                ))),
+            }?;
+        }
+        Ok(())
+    }
+
     pub fn resolve(&mut self) -> Result<(), TypeError> {
         // Solve the constraint system for the TypeVars
         let subs = solve(self.constraints.clone())?;
@@ -894,70 +941,31 @@ impl SubState {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::ast::{Expr, Node, Num, Term};
-    use crate::semantic::SymbolTable;
+    use crate::infer::*;
+    use crate::rascal::RootParser;
+    use crate::semantic::{SymbolStack, SymbolTable};
     use crate::symbol::{new_symbol, new_var};
     use crate::types::{FunctionType, Type};
 
     #[test]
-    fn infer_simple_passing() {
-        let ctx: SymbolStack = vec![SymbolTable {
-            table: vec![(new_symbol("x".into()), new_var(Type::Int32, Node::Null))]
-                .into_iter()
-                .collect(),
-        }];
-        let expr: Expr = Expr::Add(
-            Box::new(TypedExpr {
-                type_t: Type::Unknown,
-                expr: Expr::Term(Box::new(TypedTerm {
-                    type_t: Type::Unknown,
-                    term: Term::Id("x".into()),
-                })),
-            }),
-            Box::new(TypedExpr {
-                type_t: Type::Unknown,
-                expr: Expr::Term(Box::new(TypedTerm {
-                    type_t: Type::Unknown,
-                    term: Term::Num(Num::Int32(5)),
-                })),
-            }),
-        );
-        let res = infer(ctx, expr);
-        assert!(res.is_ok());
-    }
-
-    #[test]
-    fn unify_simple_unify() {
+    fn test_mgu_simple() {
         let subs = mgu(Type::TypeVar(0), Type::Int32);
         println!("subs: {:?}", subs);
         assert!(subs.is_ok());
     }
 
     #[test]
-    fn unify_simple_func_unify() {
+    fn test_mgu_lambda() {
         let subs = mgu(
             Type::Function(FunctionType {
-                params_t: vec![Type::TypeVar(0), Type::Int64],
-                return_t: Box::new(Type::TypeVar(1)),
+                params_t: vec![Type::TypeVar(0), Type::Int32],
+                return_t: Box::new(Type::TypeVar(2)),
             }),
             Type::Function(FunctionType {
-                params_t: vec![Type::Int32, Type::TypeVar(2)],
-                return_t: Box::new(Type::String),
-            }),
-        );
-        println!("subs: {:?}", subs);
-        assert!(subs.is_ok());
-    }
-
-    #[test]
-    fn unify_simple_whole_function() {
-        let subs = mgu(
-            Type::Function(FunctionType {
-                params_t: vec![Type::String, Type::Int64, Type::Float32],
+                params_t: vec![Type::Int32, Type::TypeVar(1)],
                 return_t: Box::new(Type::Int32),
             }),
-            Type::TypeVar(0),
         );
         println!("subs: {:?}", subs);
         assert!(subs.is_ok());
@@ -973,5 +981,59 @@ mod tests {
         let subs = solve(vec![Constraint::Eq(t1, t2)]);
         println!("solved: {:?}", subs);
         assert!(subs.is_ok());
+    }
+
+    #[test]
+    fn infer_lambda_function() {
+        let source = r#"
+            program test_funcs
+                    let g = fun (x: int32) -> (x + x);
+                    return g(2);
+            end
+        "#;
+        let mut root = RootParser::new().parse(&source).unwrap();
+
+        let mut typing_state = TypingState::new();
+        let tv_typing_result = typing_state.augment(&mut root);
+        assert!(tv_typing_result.is_ok());
+        let mut infer_state = InferState::new();
+        let constraint_gen_result = infer_state.constrain(&mut root);
+        assert!(constraint_gen_result.is_ok());
+        let resolve_result = infer_state.resolve();
+        assert!(resolve_result.is_ok());
+        let fully_determined = infer_state.is_fully_determined();
+        assert!(fully_determined.is_ok());
+        let mut sub_state = SubState::new(infer_state.get_type_mapping());
+        let sub_gen_result = sub_state.substitute(&mut root);
+        assert!(sub_gen_result.is_ok());
+    }
+
+    #[test]
+    fn test_infer_nested_lambda() {
+        let source = r#"
+            program nested
+                    let f = fun (x: int32) begin
+                            let g = fun (y: int32) -> (y * 2);
+                            return g(x);
+                    end;
+                    return f(3);
+            end
+        "#;
+
+        let mut root = RootParser::new().parse(&source).unwrap();
+
+        let mut typing_state = TypingState::new();
+        let tv_typing_result = typing_state.augment(&mut root);
+        assert!(tv_typing_result.is_ok());
+        let mut infer_state = InferState::new();
+        let constraint_gen_result = infer_state.constrain(&mut root);
+        assert!(constraint_gen_result.is_ok());
+        let resolve_result = infer_state.resolve();
+        assert!(resolve_result.is_ok());
+        let fully_determined = infer_state.is_fully_determined();
+        assert!(fully_determined.is_ok());
+        let mut sub_state = SubState::new(infer_state.get_type_mapping());
+        let sub_gen_result = sub_state.substitute(&mut root);
+        assert!(sub_gen_result.is_ok());
     }
 }
