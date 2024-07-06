@@ -150,6 +150,9 @@ fn subst_into_constr(sub: Vec<Subst>, constr: Constraint) -> Constraint {
     }
 }
 
+// Implement inference with:
+// Generalizing Hindley-Milner Type Inference Algorithms
+// from Heeren, Hage, and Swierstra
 fn solve_helper(
     constraints: Vec<Constraint>,
     sub: &mut Vec<Subst>,
@@ -177,13 +180,6 @@ pub fn solve(constraints: Vec<Constraint>) -> Result<Vec<Subst>, TypeError> {
     let mut substitutions = vec![];
     solve_helper(constraints, &mut substitutions)?;
     Ok(substitutions)
-}
-
-// Implement inference with:
-// Generalizing Hindley-Milner Type Inference Algorithms
-// from Heeren, Hage, and Swierstra
-pub fn infer(gamma: SymbolStack, expr: Expr) -> Result<Type, TypeError> {
-    Ok(Type::Nil)
 }
 
 pub struct TypingState {
@@ -384,7 +380,7 @@ impl Traverse for InferState {
             program,
             postblock,
         } = root;
-        self.spush();
+        self.spush()?;
         self.visit_preblock(preblock)?;
         self.visit_postblock(postblock)?;
         self.surrounding_func_types
@@ -413,7 +409,7 @@ impl Traverse for InferState {
     }
 
     fn visit_block(&mut self, block: &mut Block) -> Result<(), Self::Error> {
-        self.spush();
+        self.spush()?;
         for stmt in block {
             self.visit_stmt(stmt)?;
         }
@@ -535,7 +531,7 @@ impl Traverse for InferState {
                 ));
             }
             Expr::LambdaFunc(ref mut lf) => {
-                self.spush();
+                self.spush()?;
                 let func_type = Type::Function(FunctionType {
                     params_t: lf.params.iter().map(|p| p.type_t.clone()).collect(),
                     return_t: Box::new(lf.return_t.clone()),
@@ -605,10 +601,7 @@ impl Traverse for InferState {
                 self.constraints
                     .push(Constraint::Eq(var.type_t.clone(), expr.type_t.clone()));
             }
-            Stmt::Call(symbol, args) => {
-                let target_func = slookup(&self.symbols, symbol.clone()).ok_or(
-                    TypeError::IdentNotFound(format!("Function {:?} not found", symbol.clone())),
-                )?;
+            Stmt::Call(_, _) => {
                 // Inferring types based of these call statements needs to be treated
                 // differently since there is no return type to deduce
                 /*
@@ -633,7 +626,7 @@ impl Traverse for InferState {
                         Node::Null,
                     ),
                 );
-                self.spush();
+                self.spush()?;
                 self.surrounding_func_types
                     .push(Type::Function(FunctionType {
                         params_t: func.params.iter().map(|p| p.type_t.clone()).collect(),
@@ -941,11 +934,8 @@ impl SubState {
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::{Expr, Node, Num, Term};
     use crate::infer::*;
     use crate::rascal::RootParser;
-    use crate::semantic::{SymbolStack, SymbolTable};
-    use crate::symbol::{new_symbol, new_var};
     use crate::types::{FunctionType, Type};
 
     #[test]

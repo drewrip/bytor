@@ -1,8 +1,7 @@
 use crate::ir::IRNode;
-use crate::symbol::{Symbol};
+use crate::symbol::Symbol;
 use anyhow::Result;
 use std::collections::HashMap;
-use std::io::Write;
 
 use thiserror::Error;
 
@@ -14,15 +13,6 @@ pub enum CodeGenError {
     BinaryWrite(String),
     #[error("Couldn't compile binary: {0}")]
     CompilationFailed(String),
-}
-
-macro_rules! matches_variant {
-    ($val:expr, $var:path) => {
-        match $val {
-            $var { .. } => true,
-            _ => false,
-        }
-    };
 }
 
 pub struct SymbolAssignments {

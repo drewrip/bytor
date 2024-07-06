@@ -98,7 +98,7 @@ impl Traverse for ProgramState {
                 self.visit_if_cases(ifcases)?;
             }
             Stmt::Call(symbol, args) => {
-                self.visit_args(args);
+                self.visit_args(args)?;
                 let resolved_ret_t = match slookup(&self.stack, symbol.clone()) {
                     Some(var) => &var.type_t,
                     None => {
@@ -218,7 +218,7 @@ impl Traverse for ProgramState {
             Expr::Neg(_) => self.unary_op(expr.clone()),
             Expr::Term(mut term) => self.visit_term(&mut term),
             Expr::Call(symbol, mut args) => {
-                self.visit_args(&mut args);
+                self.visit_args(&mut args)?;
                 self.build_stack
                     .push(IRNode::Eval(ir::Func::Func(ir::Signature {
                         symbol,
@@ -240,7 +240,7 @@ impl Traverse for ProgramState {
                 }));
             }
             Term::Expr(mut expr) => {
-                self.visit_expr(&mut expr);
+                self.visit_expr(&mut expr)?;
             }
             Term::Bool(b) => {
                 self.build_stack.push(IRNode::Term(ir::Term {
@@ -336,7 +336,6 @@ impl Traverse for ProgramState {
         let if_ir_num = self.get_new_scope();
         let if_ir_id = format!("_if_stmt_{}", if_ir_num);
         self.build_stack.push(IRNode::If(if_ir_id.clone()));
-        let num_cases = if_cases.len();
         for (n, if_case) in if_cases.into_iter().enumerate() {
             self.visit_expr(&mut if_case.condition.clone())?;
             if n == 0 {
@@ -381,7 +380,7 @@ impl ProgramState {
     }
 
     pub fn build_ir(&mut self) -> Result<(), BuildIRError> {
-        self.spush();
+        self.spush()?;
         // Find the signature of `program` blocks
         //  -> if there are none, we can abort compilation :)
         self.program_signature_discovery()?;
@@ -548,9 +547,5 @@ impl ProgramState {
         };
         self.build_stack.push(IRNode::Eval(resolved_func));
         Ok(())
-    }
-
-    fn ins_label(&mut self, label: String) {
-        self.build_stack.push(IRNode::Label(ir::Label(label)));
     }
 }
