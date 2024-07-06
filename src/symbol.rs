@@ -53,7 +53,7 @@ impl Symbolic for ast::Program {
 impl Symbolic for ast::Stmt {
     fn get_symbol(&self) -> Option<IdentMapping> {
         match self {
-            ast::Stmt::Assign(symbol, var, expr) => Some(IdentMapping {
+            ast::Stmt::Assign(symbol, var, _) => Some(IdentMapping {
                 symbol: symbol.clone(),
                 var: (*var.clone()).clone(),
             }),

@@ -18,7 +18,7 @@ pub mod symbol;
 pub mod traverse;
 pub mod types;
 
-use backends::{c::CGenContext, wasm::WasmGenContext};
+use backends::c::CGenContext;
 use codegen::CodeGen;
 use semantic::ProgramState;
 
@@ -67,6 +67,7 @@ pub enum BuildError {
     #[error("There was a problem creating the output: {0}")]
     Output(String),
 }
+
 fn main() -> Result<(), BuildError> {
     let args = Args::parse();
     let save_c: bool;
@@ -122,9 +123,13 @@ fn main() -> Result<(), BuildError> {
     // Generate code
     let ctx = codegen::new(build_stack, args.outfile, args.skip_validation);
     let build_result = match args.backend {
-        BackendArgs::C => CGenContext::from(ctx).gen(),
-        BackendArgs::WASM => WasmGenContext::from(ctx).gen(),
-    };
+        BackendArgs::C => Ok(CGenContext::from(ctx).gen()),
+        other => Err(BuildError::Output(format!(
+            "Backend not yet stable, can't generate code: {:?}",
+            other
+        ))),
+        // BackendArgs::WASM => WasmGenContext::from(ctx).gen(),
+    }?;
     if !save_c {
         fs::remove_file(CGenContext::C_OUTPUT_FILENAME)
             .map_err(|_| BuildError::Output("Cannot delete C output file".to_string()))?;

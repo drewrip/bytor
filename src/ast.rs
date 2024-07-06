@@ -154,7 +154,6 @@ impl TryFrom<Num> for ir::Value {
             Num::UInt64(n) => Ok(ir::Value::UInt64(n)),
             Num::Float32(n) => Ok(ir::Value::Float32(n)),
             Num::Float64(n) => Ok(ir::Value::Float64(n)),
-            other => Err(ASTError::NoRep(String::from("Unknown AST num"))),
         }
     }
 }
@@ -163,13 +162,12 @@ impl TryFrom<Num> for Type {
     type Error = ASTError;
     fn try_from(num: Num) -> Result<Self, Self::Error> {
         match num {
-            Num::Int32(n) => Ok(Type::Int32),
-            Num::Int64(n) => Ok(Type::Int64),
-            Num::UInt32(n) => Ok(Type::UInt32),
-            Num::UInt64(n) => Ok(Type::UInt64),
-            Num::Float32(n) => Ok(Type::Float32),
-            Num::Float64(n) => Ok(Type::Float64),
-            other => Err(ASTError::NoRep(String::from("Unknown AST num"))),
+            Num::Int32(_) => Ok(Type::Int32),
+            Num::Int64(_) => Ok(Type::Int64),
+            Num::UInt32(_) => Ok(Type::UInt32),
+            Num::UInt64(_) => Ok(Type::UInt64),
+            Num::Float32(_) => Ok(Type::Float32),
+            Num::Float64(_) => Ok(Type::Float64),
         }
     }
 }

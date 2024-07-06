@@ -7,15 +7,6 @@ use std::fs::File;
 use std::io::Write;
 use std::process::Command;
 
-macro_rules! matches_variant {
-    ($val:expr, $var:path) => {
-        match $val {
-            $var { .. } => true,
-            _ => false,
-        }
-    };
-}
-
 pub fn translate_value(value: ir::Value) -> String {
     match value {
         ir::Value::Int32(num) => format!("INT32_C({})", num),
@@ -46,7 +37,6 @@ pub fn translate_value(value: ir::Value) -> String {
         }
         ir::Value::String(s) => format!("{}", s),
         ir::Value::Id(ident) => format!("{}", ident),
-        other => panic!("No value translation for: {:?}", other),
     }
 }
 
@@ -61,7 +51,6 @@ pub fn is_expr_node(node: IRNode) -> bool {
 pub struct CGenContext {
     build_stack: Vec<IRNode>,
     outfile: String,
-    skip_validation: bool,
     code_buffer: Vec<String>,
     global_idx: usize,
     type_counter: usize,
@@ -74,7 +63,6 @@ impl From<CodeGenContext> for CGenContext {
         CGenContext {
             build_stack: ctx.build_stack.into_iter().rev().collect(),
             outfile: ctx.outfile,
-            skip_validation: ctx.skip_validation,
             code_buffer: vec![],
             global_idx: 0,
             type_counter: 0,
@@ -86,7 +74,7 @@ impl From<CodeGenContext> for CGenContext {
 
 impl CodeGen for CGenContext {
     fn gen(&mut self) -> Result<(), CodeGenError> {
-        self.gen_includes();
+        self.gen_includes()?;
         self.save_global_idx();
         let start = self.gen_globals();
         self.gen_program(start);
@@ -234,9 +222,6 @@ impl CGenContext {
                 IRNode::EndGlobalSection => {
                     panic!("IRNode::EndGlobalSection should not be handled as code")
                 }
-                other => {
-                    panic!("Unimplemented IRNode: {:?}", other);
-                }
             };
         }
         node_idx
@@ -264,7 +249,7 @@ impl CGenContext {
                 self.add_code(&self.func_name_map.get(scope_id).unwrap().clone());
             }
             _ => {
-                self.gen_expr(idx - 1);
+                self.gen_expr(idx - 1)?;
             }
         };
         self.add_code(";");
@@ -274,7 +259,7 @@ impl CGenContext {
     fn gen_reassign(&mut self, idx: usize, reassign: ir::Reassign) -> Result<usize, CodeGenError> {
         self.add_code(&*reassign.symbol.ident.clone());
         self.add_code("=");
-        self.gen_expr(idx - 1);
+        self.gen_expr(idx - 1)?;
         self.add_code(";");
         Ok(idx + 1)
     }
@@ -388,7 +373,7 @@ impl CGenContext {
     fn gen_if_case(&mut self, idx: usize) -> Result<usize, CodeGenError> {
         self.add_code("if");
         self.add_code("(");
-        self.gen_expr(idx - 1);
+        self.gen_expr(idx - 1)?;
         self.add_code(")");
         self.add_code("{");
         Ok(idx + 1)
@@ -398,7 +383,7 @@ impl CGenContext {
         self.add_code("}");
         self.add_code("else if");
         self.add_code("(");
-        self.gen_expr(idx - 1);
+        self.gen_expr(idx - 1)?;
         self.add_code(")");
         self.add_code("{");
         Ok(idx + 1)
@@ -442,7 +427,7 @@ impl CGenContext {
 
     fn gen_return(&mut self, idx: usize) -> Result<usize, CodeGenError> {
         self.add_code("return");
-        self.gen_expr(idx - 1);
+        self.gen_expr(idx - 1)?;
         self.add_code(";");
         Ok(idx + 1)
     }

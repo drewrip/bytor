@@ -9,15 +9,6 @@ use wasm_encoder::{
     TypeSection, ValType,
 };
 
-macro_rules! matches_variant {
-    ($val:expr, $var:path) => {
-        match $val {
-            $var { .. } => true,
-            _ => false,
-        }
-    };
-}
-
 pub struct WasmGenContext {
     build_stack: Vec<IRNode>,
     outfile: String,

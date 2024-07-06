@@ -1,0 +1,7 @@
+program nested
+	let f = fun (x: int32) begin
+		let g = fun (y: int32) -> (y * 2);
+		return g(x);
+	end;
+	return f(3);
+end

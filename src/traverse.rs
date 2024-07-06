@@ -36,9 +36,9 @@ pub trait Traverse {
     fn visit_stmt(&mut self, stmt: &mut Stmt) -> Result<(), Self::Error> {
         match stmt {
             Stmt::If(cases) => self.visit_if_cases(cases),
-            Stmt::Assign(symbol, var, expr) => self.visit_expr(expr),
-            Stmt::Reassign(symbol, var, assign_op, expr) => self.visit_expr(expr),
-            Stmt::Call(symbol, args) => self.visit_args(args),
+            Stmt::Assign(_, _, expr) => self.visit_expr(expr),
+            Stmt::Reassign(_, _, _, expr) => self.visit_expr(expr),
+            Stmt::Call(_, args) => self.visit_args(args),
             Stmt::FuncDef(func) => self.visit_func(func),
             Stmt::Return(expr) => self.visit_expr(expr),
         }
