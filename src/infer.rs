@@ -976,7 +976,7 @@ mod tests {
     #[test]
     fn infer_lambda_function() {
         let source = r#"
-            program test_funcs
+            program test_funcs begin
                     let g = fun (x: int32) -> (x + x);
                     return g(2);
             end
@@ -1001,12 +1001,41 @@ mod tests {
     #[test]
     fn test_infer_nested_lambda() {
         let source = r#"
-            program nested
+            program nested begin
                     let f = fun (x: int32) begin
                             let g = fun (y: int32) -> (y * 2);
                             return g(x);
                     end;
                     return f(3);
+            end
+        "#;
+
+        let mut root = RootParser::new().parse(&source).unwrap();
+
+        let mut typing_state = TypingState::new();
+        let tv_typing_result = typing_state.augment(&mut root);
+        assert!(tv_typing_result.is_ok());
+        let mut infer_state = InferState::new();
+        let constraint_gen_result = infer_state.constrain(&mut root);
+        assert!(constraint_gen_result.is_ok());
+        let resolve_result = infer_state.resolve();
+        assert!(resolve_result.is_ok());
+        let fully_determined = infer_state.is_fully_determined();
+        assert!(fully_determined.is_ok());
+        let mut sub_state = SubState::new(infer_state.get_type_mapping());
+        let sub_gen_result = sub_state.substitute(&mut root);
+        assert!(sub_gen_result.is_ok());
+    }
+
+    #[test]
+    fn test_infer_complex_function() {
+        let source = r#"
+            fun foo(x: int32) -> (fun (int32) -> int32) begin
+                    return fun (n: int32) -> (n + x + 1);
+            end
+            program nested begin
+                    let f = foo(2);
+                    return f(4);
             end
         "#;
 

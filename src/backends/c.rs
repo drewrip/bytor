@@ -244,14 +244,7 @@ impl CGenContext {
         self.add_code(assignment_type);
         self.add_code(&assign.symbol.ident.clone());
         self.add_code("=");
-        match self.build_stack.get(idx - 1).unwrap() {
-            IRNode::EndFuncDef(scope_id) => {
-                self.add_code(&self.func_name_map.get(scope_id).unwrap().clone());
-            }
-            _ => {
-                self.gen_expr(idx - 1)?;
-            }
-        };
+        self.gen_expr(idx - 1)?;
         self.add_code(";");
         Ok(idx + 1)
     }
@@ -265,6 +258,12 @@ impl CGenContext {
     }
 
     fn gen_expr(&mut self, idx: usize) -> Result<(), CodeGenError> {
+        // Return pointer to the correction function if the expr is just a function def
+        if let IRNode::EndFuncDef(scope_id) = self.build_stack.get(idx).unwrap() {
+            self.add_code(&self.func_name_map.get(scope_id).unwrap().clone());
+            return Ok(());
+        }
+
         // Collect
         let expr: Vec<IRNode> = self
             .build_stack
