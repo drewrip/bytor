@@ -1,12 +1,12 @@
 let x = 3 * (4 + 5);
 
-fun baz(x: int32, y: int32) -> int32
+fun baz(x: int32, y: int32) -> int32 begin
   let z = 4 * (4 / 5);
-  let y = 3;
-  return y;
+  let w = 3;
+  return w;
 end
 
-program test_program
+program test_program begin
   let working = baz(2, 3);
   let test = 66;
 end

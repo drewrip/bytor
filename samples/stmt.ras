@@ -1,4 +1,4 @@
 let x = 3 * (4 + 5);
 
-program test_program
+program test_program begin
 end

@@ -1,4 +1,4 @@
-program test_program
+program test_program begin
     let x: int32 = -2;
     return x;
 end

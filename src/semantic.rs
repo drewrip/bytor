@@ -537,11 +537,11 @@ impl ProgramState {
         let resolved_func = match operator.expr {
             Expr::Not(mut u) => {
                 self.visit_expr(&mut u)?;
-                ir::Func::Add(ir::new_sig("Not", vec![u.type_t.clone()], operator.type_t))
+                ir::Func::Not(ir::new_sig("Not", vec![u.type_t.clone()], operator.type_t))
             }
             Expr::Neg(mut u) => {
                 self.visit_expr(&mut u)?;
-                ir::Func::Add(ir::new_sig("Neg", vec![u.type_t.clone()], operator.type_t))
+                ir::Func::Neg(ir::new_sig("Neg", vec![u.type_t.clone()], operator.type_t))
             }
             _ => panic!("Not sure how to represent {:?} in IR!", operator),
         };
