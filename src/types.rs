@@ -14,10 +14,12 @@ pub enum Type {
     // User defined types
     Function(FunctionType),
     Program,
+    TypeId(String), // Name of a user defined type
     // Compiler and existence
     Unknown,
     Nil,
     TypeVar(u32),
+    TypeGeneric(String), // Explicit type var provided by user
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]

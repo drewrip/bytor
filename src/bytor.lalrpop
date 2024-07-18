@@ -83,6 +83,8 @@ pub Stmt: Box<Stmt> = {
     <id:Id> "(" <args:Args> ")" ";" => Box::new(Stmt::Call(Symbol{ident: id}, args)),
     <f:Func> => Box::new(Stmt::FuncDef(f)),
     "return" <e:Expr> ";" => Box::new(Stmt::Return(e)),
+    <t:type_decl> => Box::new(Stmt::TypeDecl(t)),
+    <t:impl_trait> => Box::new(Stmt::ImplTrait(t))
 };
 
 pub Program: Box<Program> = {
@@ -208,6 +210,29 @@ pub Type: Type = {
     "Nil" => Type::Nil,
     #[precedence(level="1")] #[assoc(side="left")]
     "(" <t:Type> ")" => t,
+    <id:Id> => Type::TypeId(id),
 }
 
 pub ArgTypes: Vec<Type> = Comma<Type>;
+
+type_decl: TypeDecl = {
+    "type" <id:Id> "=" "trait" "<" <gens:Ids> ">" "begin" <gen_sigs:signatures> "end" => TypeDecl::Trait(TraitDecl{ident: id, generics: gens, signatures: gen_sigs}),
+}
+
+impl_trait: ImplTrait = {
+    "impl" <id:Id> "<" <gens:ArgTypes> ">" "begin" <func_defs:func_def_block> "end" => ImplTrait{ident: id, generics: gens, func_defs: func_defs},
+}
+
+func_def_block: Vec<Func> = {
+    <fs:(<Func>)*> => fs,
+}
+
+Ids: Vec<String> = Comma<Id>;
+
+signature: Signature = {
+    "fun" <id:Id> "(" <args:ArgTypes> ")" "->" <ret:Type> => Signature{ident: id, params_t: args, return_t: ret},
+}
+
+signatures: Vec<Signature> = {
+    <sigs:(<signature> ";")*> => sigs,
+}

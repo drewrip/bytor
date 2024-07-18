@@ -107,6 +107,8 @@ pub enum Stmt {
     Call(Symbol, Args),
     FuncDef(Func),
     Return(Box<TypedExpr>),
+    TypeDecl(TypeDecl),
+    ImplTrait(ImplTrait),
 }
 
 pub type Args = Vec<Box<TypedExpr>>;
@@ -170,4 +172,32 @@ impl TryFrom<Num> for Type {
             Num::Float64(_) => Ok(Type::Float64),
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TypeDecl {
+    Trait(TraitDecl),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Signature {
+    pub ident: String,
+    pub params_t: Vec<Type>,
+    pub return_t: Type,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TraitDecl {
+    pub ident: String,
+    // List of generic names used
+    pub generics: Vec<String>,
+    pub signatures: Vec<Signature>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImplTrait {
+    pub ident: String,
+    // List of generic names used
+    pub generics: Vec<Type>,
+    pub func_defs: Vec<Func>,
 }

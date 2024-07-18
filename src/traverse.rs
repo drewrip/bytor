@@ -41,6 +41,8 @@ pub trait Traverse {
             Stmt::Call(_, args) => self.visit_args(args),
             Stmt::FuncDef(func) => self.visit_func(func),
             Stmt::Return(expr) => self.visit_expr(expr),
+            Stmt::TypeDecl(_) => todo!(),
+            Stmt::ImplTrait(_) => todo!(),
         }
     }
 

@@ -198,6 +198,8 @@ impl Traverse for ProgramState {
                 self.visit_expr(expr)?;
                 self.build_stack.push(IRNode::Return);
             }
+            Stmt::TypeDecl(_) => todo!(),
+            Stmt::ImplTrait(_) => todo!(),
         };
         Ok(())
     }

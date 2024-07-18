@@ -1,0 +1,21 @@
+type Addable = trait<a> begin
+	fun add(a, a) -> a;
+end
+
+impl Addable<bool> begin
+	fun add(x: bool, y: bool) -> bool begin
+		if x == false then
+			if y == false then
+				return false;
+			else then
+				return true;
+			end
+		else then
+			return true;
+		end
+	end
+end
+
+program test begin
+	return 0;
+end

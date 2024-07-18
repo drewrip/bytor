@@ -366,6 +366,8 @@ impl Traverse for TypingState {
             Stmt::Return(expr) => {
                 self.visit_expr(expr)?;
             }
+            Stmt::TypeDecl(_) => todo!(),
+            Stmt::ImplTrait(_) => todo!(),
         };
         Ok(())
     }
@@ -659,6 +661,8 @@ impl Traverse for InferState {
                     *surround_func_type.return_t.clone(),
                 ));
             }
+            Stmt::TypeDecl(_) => todo!(),
+            Stmt::ImplTrait(_) => todo!(),
         };
         Ok(())
     }
@@ -806,6 +810,8 @@ impl Traverse for SubState {
             Stmt::Return(expr) => {
                 self.visit_expr(expr)?;
             }
+            Stmt::TypeDecl(_) => todo!(),
+            Stmt::ImplTrait(_) => todo!(),
         };
         Ok(())
     }
