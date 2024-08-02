@@ -1,8 +1,8 @@
-fun foo(x: int32, y: int64) -> int32
+fun foo(x: int32, y: int64) -> int32 begin
     let z = x;
     let w = y;
 end
 
-program passing1
+program passing1 begin
     foo(12i32, 22i64);
 end

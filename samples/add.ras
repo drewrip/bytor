@@ -1,8 +1,10 @@
-fun add(a: int64, b: int64) -> int64
+fun add(a: int32, b: int32) -> int32 begin
     return a + b;
 end
 
-program test_add
+program test_add begin
+    let x = 2;
+    let y = 4;
     let res = add(x, y);
     return res;
 end

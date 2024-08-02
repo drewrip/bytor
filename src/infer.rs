@@ -510,8 +510,6 @@ impl Traverse for InferState {
                 self.visit_expr(u)?;
                 self.constraints
                     .push(Constraint::Eq(u.type_t.clone(), expr.type_t.clone()));
-                self.constraints
-                    .push(Constraint::Eq(Type::Bool, expr.type_t.clone()));
             }
             Expr::Term(ref mut t) => {
                 self.visit_term(t)?;
@@ -529,6 +527,9 @@ impl Traverse for InferState {
                         return_t: Box::new(expr.type_t.clone()),
                     }),
                 ));
+                for mut arg in args {
+                    self.visit_expr(&mut arg)?;
+                }
             }
             Expr::LambdaFunc(ref mut lf) => {
                 self.spush()?;

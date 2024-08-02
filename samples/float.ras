@@ -1,8 +1,8 @@
-fun foo(x: float32) -> float32
+fun foo(x: float64) -> float64 begin
     return 2.0 * x;
 end
 
-program test_program
+program test_program begin
     let x = 5.0 / 2.0;
     let y = 0;
     if x > 2.4 then

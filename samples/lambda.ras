@@ -1,9 +1,9 @@
-fun foo(x: int32) -> int32
+fun foo(x: int32) -> int32 begin
 	return x + 5;
 end
 
-program test_funcs
-	let f: (int32) -> int32 = foo;
+program test_funcs begin
+	let f: fun (int32) -> int32 = foo;
 	let res = f(3);
 
 	let g = fun (x: int32) -> (1i32);
