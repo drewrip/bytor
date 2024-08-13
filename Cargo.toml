@@ -1,9 +1,17 @@
 [package]
-name = "rascalc"
+name = "bytor"
+description = "A small WIP programming language"
 version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+authors = ["Drew Ripberger <drew.ripberger@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/drewrip/bytor"
+keywords = ["compiler"]
+exclude = [
+	"samples/*",
+	".github/*",
+]
 
 [build-dependencies]
 lalrpop = "0.20.0"

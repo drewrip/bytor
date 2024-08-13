@@ -935,8 +935,8 @@ impl SubState {
 
 #[cfg(test)]
 mod tests {
+    use crate::bytor::RootParser;
     use crate::infer::*;
-    use crate::rascal::RootParser;
     use crate::types::{FunctionType, Type};
 
     #[test]

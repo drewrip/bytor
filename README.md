@@ -1,4 +1,4 @@
-# Rascal
+# Bytor
 
 A language inspired by Pascal and Rust
 
@@ -33,17 +33,17 @@ end
 ## Usage
 
 You can try the latest version of the compiler with using some basic `gcc` like options.
-Build the Rascal compiler `rascalc` with Cargo and ensure you have
+Build the Bytor compiler `bytor` with Cargo and ensure you have
 `gcc` installed. Then you can compile the `calc_fib` example above by running:
 
 ```
-rascalc fib.ras -o fib
+bytor fib.ras -o fib
 ```
 
 ## Roadmap
 
 I'm currently developing the basics of the language. My original goal was to target WASM,
-however in an effort to speed up language development and hopefully ensure that Rascal isn't just
+however in an effort to speed up language development and hopefully ensure that Bytor isn't just
 "high level" WASM, I'm starting by generating C. Then we can call to `gcc`.
 
 I'm hoping to bring the `backends/wasm.rs` WASM backend up to date later.

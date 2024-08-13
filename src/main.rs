@@ -22,11 +22,11 @@ use backends::c::CGenContext;
 use codegen::CodeGen;
 use semantic::ProgramState;
 
-/// Compiler for the Rascal language
+/// Compiler for the Bytor language
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    /// Input Rascal source file
+    /// Input Bytor source file
     infile: String,
 
     /// Name of output binary
@@ -58,7 +58,7 @@ enum EmitArgs {
     C,
 }
 
-lalrpop_mod!(pub rascal);
+lalrpop_mod!(pub bytor);
 
 #[derive(Error, Debug)]
 pub enum BuildError {
@@ -86,7 +86,7 @@ fn main() -> Result<(), BuildError> {
     let build_stack = if file_extension == "ir" {
         serde_json::from_str(&src_file).map_err(|err| BuildError::Input(err.to_string()))?
     } else {
-        let mut root = rascal::RootParser::new()
+        let mut root = bytor::RootParser::new()
             .parse(&src_file)
             .map_err(|err| BuildError::Input(err.to_string()))?;
 
