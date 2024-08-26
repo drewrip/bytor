@@ -58,7 +58,7 @@ pub Stmt: Box<Stmt> = {
           e
         )
     ),
-    "let" <i:Id> ":" <t:Type> "=" <e:Expr> ";" => Box::new(
+    "let" <i:Id> ":" <t:type_t> "=" <e:Expr> ";" => Box::new(
         Stmt::Assign(
           Symbol{ident: i},
           Box::new(Var{type_t: t, node: Node::Null}),
@@ -94,13 +94,13 @@ pub Program: Box<Program> = {
 pub Params: Params = Comma<Param>;
 
 pub Param: Box<Param> = {
-    <id:Id> ":" <t:Type> => Box::new(Param{type_t: t, ident: id}),
+    <id:Id> ":" <t:type_t> => Box::new(Param{type_t: t, ident: id}),
 };
 
 pub OptionalParams: Params = Comma<OptionalParam>;
 
 pub OptionalParam: Box<Param> = {
-    <id:Id> <t:(":" <Type>)?> => {
+    <id:Id> <t:(":" <type_t>)?> => {
         let optional_type = match t {
             Some(found_type) => found_type,
             None => Type::Unknown,
@@ -110,7 +110,7 @@ pub OptionalParam: Box<Param> = {
 };
 
 pub Func: Func = {
-    "fun" <id:Id> "(" <p:Params> ")" <t:("->" <Type>)?> "begin" <b:Stmts> "end" => {
+    "fun" <id:Id> "(" <p:Params> ")" <t:("->" <type_t>)?> "begin" <b:Stmts> "end" => {
         let ret = match t {
             None => Type::Nil,
             Some(t) => t,
@@ -196,7 +196,7 @@ pub AssignOp: AssignOp = {
     "/=" => AssignOp::DivAssign,
 };
 
-pub Type: Type = {
+pub type_t: Type = {
     #[precedence(level="0")] // Highest precedence
     "int64" => Type::Int64,
     "int32" => Type::Int32,
@@ -206,21 +206,21 @@ pub Type: Type = {
     "float32" => Type::Float32,
     "bool" => Type::Bool,
     "string" => Type::String,
-    "fun" "(" <args:ArgTypes> ")" "->" <ret:Type> => Type::Function(FunctionType{params_t: args, return_t: Box::new(ret)}),
+    "fun" "(" <args:type_ts> ")" "->" <ret:type_t> => Type::Function(FunctionType{params_t: args, return_t: Box::new(ret)}),
     "Nil" => Type::Nil,
     #[precedence(level="1")] #[assoc(side="left")]
-    "(" <t:Type> ")" => t,
+    "(" <t:type_t> ")" => t,
     <id:Id> => Type::TypeId(id),
 }
 
-pub ArgTypes: Vec<Type> = Comma<Type>;
+pub type_ts: Vec<Type> = Comma<type_t>;
 
 type_decl: TypeDecl = {
-    "type" <id:Id> "=" "trait" "<" <gens:Ids> ">" "begin" <gen_sigs:signatures> "end" => TypeDecl::Trait(TraitDecl{ident: id, generics: gens, signatures: gen_sigs}),
+    "type" <id:Id> "=" "trait" "<" <gens:type_ts> ">" "begin" <gen_sigs:signatures> "end" => TypeDecl::Trait(TraitDecl{ident: id, generics: gens, signatures: gen_sigs}),
 }
 
 impl_trait: ImplTrait = {
-    "impl" <id:Id> "<" <gens:ArgTypes> ">" "begin" <func_defs:func_def_block> "end" => ImplTrait{ident: id, generics: gens, func_defs: func_defs},
+    "impl" <id:Id> "<" <gens:type_ts> ">" "begin" <func_defs:func_def_block> "end" => ImplTrait{ident: id, generics: gens, func_defs: func_defs},
 }
 
 func_def_block: Vec<Func> = {
@@ -230,7 +230,7 @@ func_def_block: Vec<Func> = {
 Ids: Vec<String> = Comma<Id>;
 
 signature: Signature = {
-    "fun" <id:Id> "(" <args:ArgTypes> ")" "->" <ret:Type> => Signature{ident: id, params_t: args, return_t: ret},
+    "fun" <id:Id> "(" <args:type_ts> ")" "->" <ret:type_t> => Signature{ident: id, params_t: args, return_t: ret},
 }
 
 signatures: Vec<Signature> = {

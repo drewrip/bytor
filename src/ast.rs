@@ -190,7 +190,7 @@ pub struct Signature {
 pub struct TraitDecl {
     pub ident: String,
     // List of generic names used
-    pub generics: Vec<String>,
+    pub generics: Vec<Type>,
     pub signatures: Vec<Signature>,
 }
 

@@ -41,8 +41,8 @@ pub trait Traverse {
             Stmt::Call(_, args) => self.visit_args(args),
             Stmt::FuncDef(func) => self.visit_func(func),
             Stmt::Return(expr) => self.visit_expr(expr),
-            Stmt::TypeDecl(_) => todo!(),
-            Stmt::ImplTrait(_) => todo!(),
+            Stmt::TypeDecl(type_decl) => self.visit_type_decl(type_decl),
+            Stmt::ImplTrait(impl_trait) => self.visit_impl_trait(impl_trait),
         }
     }
 
@@ -136,6 +136,23 @@ pub trait Traverse {
         for ifcase in cases {
             self.visit_expr(&mut ifcase.condition)?;
             self.visit_block(&mut ifcase.block)?;
+        }
+        Ok(())
+    }
+
+    fn visit_type_decl(&mut self, type_decl: &mut TypeDecl) -> Result<(), Self::Error> {
+        match type_decl.clone() {
+            TypeDecl::Trait(mut trait_decl) => self.visit_trait_decl(&mut trait_decl),
+        }
+    }
+
+    fn visit_trait_decl(&mut self, trait_decl: &mut TraitDecl) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    fn visit_impl_trait(&mut self, impl_trait: &mut ImplTrait) -> Result<(), Self::Error> {
+        for func in &mut impl_trait.func_defs {
+            self.visit_func(func)?;
         }
         Ok(())
     }

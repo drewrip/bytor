@@ -1,10 +1,13 @@
-use crate::ast::{Block, Expr, Node, Param, Root, Stmt, Term, TypedExpr, TypedTerm};
+use crate::ast::{
+    Block, Expr, ImplTrait, Node, Param, Root, Stmt, Term, TraitDecl, TypeDecl, TypedExpr,
+    TypedTerm,
+};
 use crate::semantic::{new_empty_symbol_table, sinsert, slookup, SymbolStack, SymbolTable};
 use crate::symbol::{new_symbol, new_var};
 use crate::traverse::Traverse;
 use crate::types::{FunctionType, Type};
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -19,6 +22,8 @@ pub enum TypeError {
     SubstitutionError(String),
     #[error("The types in the program could not be fully infered: {0}")]
     UndeterminedVariables(String),
+    #[error("An invalid generic was given: {0:?}")]
+    InvalidGeneric(Type),
 }
 
 #[derive(Debug, Clone)]
@@ -184,6 +189,7 @@ pub fn solve(constraints: Vec<Constraint>) -> Result<Vec<Subst>, TypeError> {
 
 pub struct TypingState {
     type_var_counter: u32,
+    type_symbols: SymbolStack,
 }
 
 pub struct InferState {
@@ -366,9 +372,47 @@ impl Traverse for TypingState {
             Stmt::Return(expr) => {
                 self.visit_expr(expr)?;
             }
-            Stmt::TypeDecl(_) => todo!(),
-            Stmt::ImplTrait(_) => todo!(),
+            Stmt::TypeDecl(type_decl) => self.visit_type_decl(type_decl)?,
+            Stmt::ImplTrait(impl_trait) => self.visit_impl_trait(impl_trait)?,
         };
+        Ok(())
+    }
+
+    fn visit_type_decl(&mut self, type_decl: &mut TypeDecl) -> Result<(), Self::Error> {
+        match type_decl.clone() {
+            TypeDecl::Trait(mut trait_decl) => self.visit_trait_decl(&mut trait_decl),
+        }
+    }
+
+    fn visit_trait_decl(&mut self, trait_decl: &mut TraitDecl) -> Result<(), Self::Error> {
+        self.spush()?;
+        // Verify each supplied "generic" type is an explicit generic type variable
+        // and there are no duplicate variables
+        for generic in &trait_decl.generics {
+            match generic {
+                Type::TypeGeneric(var) => {
+                    if slookup(&self.type_symbols, new_symbol(var.clone())).is_some() {
+                        return Err(TypeError::InvalidGeneric(generic.clone()));
+                    }
+                    sinsert(
+                        &mut self.type_symbols,
+                        new_symbol(var.clone()),
+                        new_var(generic.clone(), Node::Null),
+                    );
+                }
+                _ => {
+                    return Err(TypeError::InvalidGeneric(generic.clone()));
+                }
+            }
+        }
+        self.spop();
+        Ok(())
+    }
+
+    fn visit_impl_trait(&mut self, impl_trait: &mut ImplTrait) -> Result<(), Self::Error> {
+        for func in &mut impl_trait.func_defs {
+            self.visit_func(func)?;
+        }
         Ok(())
     }
 }
@@ -821,6 +865,7 @@ impl TypingState {
     pub fn new() -> Self {
         TypingState {
             type_var_counter: 0,
+            type_symbols: vec![],
         }
     }
 
@@ -828,6 +873,15 @@ impl TypingState {
         let new_tv = Type::TypeVar(self.type_var_counter);
         self.type_var_counter += 1;
         new_tv
+    }
+
+    pub fn spush(&mut self) -> Result<(), TypeError> {
+        self.type_symbols.push(new_empty_symbol_table());
+        Ok(())
+    }
+
+    pub fn spop(&mut self) -> Option<SymbolTable> {
+        self.type_symbols.pop()
     }
 
     pub fn augment(&mut self, root: &mut Root) -> Result<(), TypeError> {
